@@ -12,7 +12,7 @@ import filodb.core.{DatasetRef, SpreadProvider}
 import filodb.core.binaryrecord2.RecordBuilder
 import filodb.core.metadata.Schemas
 import filodb.core.query._
-import filodb.core.query.Filter.Equals
+import filodb.core.query.Filter.{Equals, EqualsRegex}
 import filodb.core.store.{AllChunkScan, ChunkScanMethod, InMemoryChunkScan, TimeRangeChunkScan, WriteBufferChunkScan}
 import filodb.prometheus.ast.Vectors.{PromMetricLabel, TypeLabel}
 import filodb.prometheus.ast.WindowConstants
@@ -152,6 +152,11 @@ class SingleClusterPlanner(dsRef: DatasetRef,
 
     require(shardColumns.nonEmpty || qContext.plannerParams.shardOverrides.nonEmpty,
       s"Dataset $dsRef does not have shard columns defined, and shard overrides were not mentioned")
+
+    filters.filter(_.column.equals(dsOptions.metricColumn)) match {
+      case ColumnFilter(_, EqualsRegex(_))::Nil => return shardMapperFunc.assignedShards
+      case _ => // Nop, proceed further
+    }
 
     qContext.plannerParams.shardOverrides.getOrElse {
       val shardVals = shardColumns.map { shardCol =>
@@ -371,21 +376,27 @@ class SingleClusterPlanner(dsRef: DatasetRef,
     if (rawSeries.isInstanceOf[RawSeries]) {
       val rawSeriesLp = rawSeries.asInstanceOf[RawSeries]
 
-      val nameFilter = rawSeriesLp.filters.find(_.column.equals(PromMetricLabel)).
-        map(_.filter.valuesStrings.head.toString)
+      val nameFilter = rawSeriesLp.filters.find(_.column.equals(PromMetricLabel))
       val leFilter = rawSeriesLp.filters.find(_.column == "le").map(_.filter.valuesStrings.head.toString)
-
-      if (nameFilter.isEmpty) (nameFilter, leFilter, lp)
-      else {
-        val filtersWithoutBucket = rawSeriesLp.filters.filterNot(_.column.equals(PromMetricLabel)).
-          filterNot(_.column == "le") :+ ColumnFilter(PromMetricLabel,
-          Equals(nameFilter.get.replace("_bucket", "")))
-        val newLp = if (lp.isLeft) Left(lp.left.get.copy(rawSeries = rawSeriesLp.copy(filters = filtersWithoutBucket)))
-        else Right(lp.right.get.copy(series = rawSeriesLp.copy(filters = filtersWithoutBucket)))
-        (nameFilter, leFilter, newLp)
+      nameFilter match {
+        case None => (None, leFilter, lp )
+        case Some(ColumnFilter(column, f @ filter)) =>
+          val newFilter = f match {
+            case regexEq @ EqualsRegex(_) => regexEq
+            case _ => Equals(f.valuesStrings.head.toString.replace("_bucket", ""))
+          }
+          val filtersWithoutBucket = rawSeriesLp.filters.filterNot(_.column.equals(PromMetricLabel)).
+            filterNot(_.column == "le") :+ ColumnFilter(PromMetricLabel, newFilter)
+          val newLp = if (lp.isLeft)
+            Left(lp.left.get.copy(rawSeries = rawSeriesLp.copy(filters = filtersWithoutBucket)))
+          else
+            Right(lp.right.get.copy(series = rawSeriesLp.copy(filters = filtersWithoutBucket)))
+          (Some(column), leFilter, newLp)
       }
-    }  else (None, None, lp)
+    } else (None, None, lp)
   }
+
+
   private def materializePeriodicSeries(qContext: QueryContext,
                                         lp: PeriodicSeries): PlanResult = {
 
