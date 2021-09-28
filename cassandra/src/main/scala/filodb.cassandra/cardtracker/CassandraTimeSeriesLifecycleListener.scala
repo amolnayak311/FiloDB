@@ -30,7 +30,6 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
 
 
   override def timeSeriesActivated(partKeyBase: Any, partKeyOffset: Long, partSchema: RecordSchema): Unit = {
-
     // All calls to these callback are sequential and not concurrent as these callbacks are invoked from TimeSeriesShard
 
     // 1. Check if the given part key is present in the database, the reason this check is necessary because,
