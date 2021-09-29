@@ -33,3 +33,4 @@ metastore_db/
 *lib*
 
 coordinator/src/test/resources/
+.run

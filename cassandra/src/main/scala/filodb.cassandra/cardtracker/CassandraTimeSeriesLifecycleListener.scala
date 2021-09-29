@@ -26,7 +26,8 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
       val keyspace: String = config.getString("keyspace")
   }
 
-  val partKeysTable = new PartKeys(datasetRef, clusterConnector, ConsistencyLevel.ONE)
+  val partKeysTable = new PartKeys(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
+  val nsByWsTable = new NamespaceByWorkspace(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
 
 
   override def timeSeriesActivated(partKeyBase: Any, partKeyOffset: Long, partSchema: RecordSchema): Unit = {
@@ -38,10 +39,12 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
     // necessary
     val partKey = partSchema.asByteArray(partKeyBase, partKeyOffset)
 
-    if(partKeysTable.partitionExists(partKey)) {
+    if(!partKeysTable.partitionExists(partKey)) {
         // 2. Partition is not recorded in cardinality tracker, record it now
         partKeysTable.writePartKey(partKey)
-
+        val labelMap = getLabelsFromPartitionKey(partKeyBase, partKeyOffset, partSchema)
+        // TODO: use Global constants, where are they defined?
+        nsByWsTable.addNamespaceToWorkspace(labelMap("_ws_"), labelMap("_ns_"))
 
 
     } else {
@@ -57,6 +60,7 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
 
   def initialize(): Unit = {
     partKeysTable.initialize()
+    nsByWsTable.initialize();
   }
 
   def shutdown(): Unit = {

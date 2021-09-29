@@ -1,5 +1,7 @@
 package filodb.cassandra.cardtracker
 
+import scala.collection.JavaConverters.asScalaSet
+
 import filodb.cassandra.AllTablesTest
 import filodb.core.TestData
 import filodb.core.binaryrecord2.RecordBuilder
@@ -19,11 +21,11 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
   override def beforeAll(): Unit = {
     super.beforeAll()
     listener.initialize()
-    listener.partKeysTable.clearAll().futureValue
   }
 
   before {
     listener.partKeysTable.clearAll().futureValue
+    listener.nsByWsTable.clearAll().futureValue
   }
 
   it ("should given new time series part key, save the new part key in cassandra") {
@@ -39,6 +41,11 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     assert(session.execute(stmt).one().getLong(0) == 0)
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert(session.execute(stmt).one().getLong(0) == 1)
+
+    val res = session.execute("select namespace from unittest.card_tracker_ns_by_ws where workspace = 'ws'")
+    asScalaSet(res.one().getSet(0, classOf[String])) shouldEqual Set("ns")
+    listener.nsByWsTable.getNamespacesForWorkspace("ws") shouldEqual Set("ns")
+
     // TODO: Assert other content
   }
 
@@ -57,6 +64,10 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     assert( session.execute(stmt).one().getLong(0) == 1)
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert(session.execute(stmt).one().getLong(0) == 1)
+    val res = session.execute("select namespace from unittest.card_tracker_ns_by_ws where workspace = 'ws'")
+    asScalaSet(res.one().getSet(0, classOf[String])) shouldEqual Set("ns")
+    listener.nsByWsTable.getNamespacesForWorkspace("ws") shouldEqual Set("ns")
+
     // TODO: Assert other content
   }
 
