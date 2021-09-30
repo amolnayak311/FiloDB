@@ -1,7 +1,6 @@
 package filodb.cassandra.cardtracker
 
 import scala.collection.JavaConverters.asScalaSet
-
 import filodb.cassandra.AllTablesTest
 import filodb.core.TestData
 import filodb.core.binaryrecord2.RecordBuilder
@@ -20,12 +19,13 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
   // First create the tables in C*
   override def beforeAll(): Unit = {
     super.beforeAll()
-    listener.initialize()
+    listener.initialize().futureValue
   }
 
   before {
     listener.partKeysTable.clearAll().futureValue
     listener.nsByWsTable.clearAll().futureValue
+    listener.metricsByWsNs.clearAll().futureValue
   }
 
   it ("should given new time series part key, save the new part key in cassandra") {
