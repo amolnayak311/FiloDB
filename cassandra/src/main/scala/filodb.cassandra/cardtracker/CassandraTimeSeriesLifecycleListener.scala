@@ -1,13 +1,13 @@
 package filodb.cassandra.cardtracker
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 import com.datastax.driver.core.{ConsistencyLevel, Session}
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 
 import filodb.cassandra.{FiloCassandraConnector, FiloSessionProvider}
-import filodb.core.DatasetRef
+import filodb.core.{DatasetRef, Success, Response}
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.memstore.TimeSeriesLifecycleListener
 
@@ -28,6 +28,7 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
 
   val partKeysTable = new PartKeys(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
   val nsByWsTable = new NamespaceByWorkspace(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
+  val metricsByWsNs = new MetricsByWorkspaceAndNamespace(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
 
 
   override def timeSeriesActivated(partKeyBase: Any, partKeyOffset: Long, partSchema: RecordSchema): Unit = {
@@ -45,7 +46,7 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
         val labelMap = getLabelsFromPartitionKey(partKeyBase, partKeyOffset, partSchema)
         // TODO: use Global constants, where are they defined?
         nsByWsTable.addNamespaceToWorkspace(labelMap("_ws_"), labelMap("_ns_"))
-
+        metricsByWsNs.incrementMetricCount(labelMap("_ws_"), labelMap("_ns_"), labelMap("_metric_"))
 
     } else {
       // Simply update the lastUpdated timestamp of the partition
@@ -58,10 +59,11 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
   override def timeSeriesDeactivated(partKeyBase: Any, partKeyOffset: Long, partSchema: RecordSchema): Unit = ???
 
 
-  def initialize(): Unit = {
-    partKeysTable.initialize()
-    nsByWsTable.initialize();
-  }
+  def initialize(): Future[Response] =
+    for {pkResp <- partKeysTable.initialize() if pkResp == Success
+          wsTable <- nsByWsTable.initialize()   if wsTable == Success
+          metricsTable <- metricsByWsNs.initialize() if metricsTable == Success}
+      yield Success
 
   def shutdown(): Unit = {
     session.close()
