@@ -46,6 +46,11 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     asScalaSet(res.one().getSet(0, classOf[String])) shouldEqual Set("ns")
     listener.nsByWsTable.getNamespacesForWorkspace("ws") shouldEqual Set("ns")
 
+    val numts = session.execute("select numts from unittest.card_tracker_metrics_by_ws_ns " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1'")
+
+    numts.one().getInt(0) shouldEqual 1
+
     // TODO: Assert other content
   }
 
@@ -62,11 +67,21 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     assert(session.execute(stmt).one().getLong(0) == 0)
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert( session.execute(stmt).one().getLong(0) == 1)
+
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert(session.execute(stmt).one().getLong(0) == 1)
+
+    // Assert the namespace is still listed under the given ws
     val res = session.execute("select namespace from unittest.card_tracker_ns_by_ws where workspace = 'ws'")
     asScalaSet(res.one().getSet(0, classOf[String])) shouldEqual Set("ns")
     listener.nsByWsTable.getNamespacesForWorkspace("ws") shouldEqual Set("ns")
+
+    // Assert the number of unique metric names is still 1 as the activate ts call is idempotent
+
+    val numts = session.execute("select numts from unittest.card_tracker_metrics_by_ws_ns " +
+          " where workspace = 'ws' and namespace = 'ns' and metric = 'metric1'")
+    numts.one().getInt(0) shouldEqual 1
+
 
     // TODO: Assert other content
   }

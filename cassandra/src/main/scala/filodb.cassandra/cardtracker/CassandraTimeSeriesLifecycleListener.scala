@@ -7,7 +7,7 @@ import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 
 import filodb.cassandra.{FiloCassandraConnector, FiloSessionProvider}
-import filodb.core.{DatasetRef, Success, Response}
+import filodb.core.{DatasetRef, Response, Success}
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.memstore.TimeSeriesLifecycleListener
 
@@ -29,6 +29,7 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
   val partKeysTable = new PartKeys(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
   val nsByWsTable = new NamespaceByWorkspace(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
   val metricsByWsNs = new MetricsByWorkspaceAndNamespace(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
+  val metricLabelCardinality = new MetricLabelCardinality(datasetRef, clusterConnector, ConsistencyLevel.LOCAL_QUORUM)
 
 
   override def timeSeriesActivated(partKeyBase: Any, partKeyOffset: Long, partSchema: RecordSchema): Unit = {
@@ -47,6 +48,8 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
         // TODO: use Global constants, where are they defined?
         nsByWsTable.addNamespaceToWorkspace(labelMap("_ws_"), labelMap("_ns_"))
         metricsByWsNs.incrementMetricCount(labelMap("_ws_"), labelMap("_ns_"), labelMap("_metric_"))
+        metricLabelCardinality.incrementLabel(labelMap("_ws_"), labelMap("_ns_"), labelMap("_metric_"), labelMap)
+        // Increment counts of all labels name value pairs
 
     } else {
       // Simply update the lastUpdated timestamp of the partition
@@ -60,9 +63,10 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
 
 
   def initialize(): Future[Response] =
-    for {pkResp <- partKeysTable.initialize() if pkResp == Success
+    for { pkResp <- partKeysTable.initialize() if pkResp == Success
           wsTable <- nsByWsTable.initialize()   if wsTable == Success
-          metricsTable <- metricsByWsNs.initialize() if metricsTable == Success}
+          metricsTable <- metricsByWsNs.initialize() if metricsTable == Success
+          metricsTable <- metricLabelCardinality.initialize() if metricsTable == Success}
       yield Success
 
   def shutdown(): Unit = {
