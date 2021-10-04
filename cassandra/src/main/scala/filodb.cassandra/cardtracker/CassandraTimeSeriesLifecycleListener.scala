@@ -45,11 +45,10 @@ class CassandraTimeSeriesLifecycleListener(datasetRef: DatasetRef, config: Confi
         // 2. Partition is not recorded in cardinality tracker, record it now
         partKeysTable.writePartKey(partKey)
         val labelMap = getLabelsFromPartitionKey(partKeyBase, partKeyOffset, partSchema)
-        // TODO: use Global constants, where are they defined?
+        // TODO: use Global constants for _ws_, _ns_ and _metric_, where are they defined?
         nsByWsTable.addNamespaceToWorkspace(labelMap("_ws_"), labelMap("_ns_"))
         metricsByWsNs.incrementMetricCount(labelMap("_ws_"), labelMap("_ns_"), labelMap("_metric_"))
         metricLabelCardinality.incrementLabel(labelMap("_ws_"), labelMap("_ns_"), labelMap("_metric_"), labelMap)
-        // Increment counts of all labels name value pairs
 
     } else {
       // Simply update the lastUpdated timestamp of the partition

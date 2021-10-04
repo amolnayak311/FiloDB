@@ -41,7 +41,7 @@ sealed class MetricsByWorkspaceAndNamespace(val dataset: DatasetRef,
     //  or do we need to use LWT (Light Weight Transactions)? LWT uses consensus algorithms and are slow
     //  Using counters makes increments atomic but non idempotent and deleting counters will have undesired behavior
     val iter = session.execute(getMetricCount.bind(workspace, namespace, metricName)).iterator();
-    val currentCount = if (iter.hasNext) iter.next().getLong(0).toInt else 0
+    val currentCount = if (iter.hasNext) iter.next().getInt(0).toInt else 0
     // Using with retries doesn't make too much sense as the previous query is executed without retries
     connector.execStmt(updateCountOfMetric.bind(currentCount + 1: JInteger, workspace, namespace, metricName))
   }

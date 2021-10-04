@@ -26,6 +26,7 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     listener.partKeysTable.clearAll().futureValue
     listener.nsByWsTable.clearAll().futureValue
     listener.metricsByWsNs.clearAll().futureValue
+    listener.metricLabelCardinality.clearAll().futureValue
   }
 
   it ("should given new time series part key, save the new part key in cassandra") {
@@ -51,7 +52,68 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
 
     numts.one().getInt(0) shouldEqual 1
 
-    // TODO: Assert other content
+    val labelValCardinality = session.execute("select values from unittest.card_tracker_metric_label_cardinality " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1' and label = 'app'")
+
+    // Check the expected cardinality
+    labelValCardinality.isExhausted shouldEqual false
+    val dict = labelValCardinality.one().getMap(0, classOf[String], classOf[Integer])
+    dict.size() shouldEqual 1
+    dict.containsKey("app1") shouldEqual true
+    dict.get("app1") shouldEqual 1
+  }
+
+  it ("should given two time series part key for same metric name, save cardinality correctly in cassandra") {
+    val partKeyBuilder1 = new RecordBuilder(TestData.nativeMem, 2048)
+    val tags1 = Map(ZeroCopyUTF8String("_ns_") -> ZeroCopyUTF8String("ns"),
+      ZeroCopyUTF8String("_ws_") -> ZeroCopyUTF8String("ws"),
+      ZeroCopyUTF8String("app") -> ZeroCopyUTF8String("app1"))
+    val partKey1 = partKeyBuilder1.partKeyFromObjects(Schemas.promCounter, "metric1", tags1)
+    val partKeyBytes1 = Schemas.promCounter.partKeySchema.asByteArray(UnsafeUtils.ZeroPointer, partKey1)
+
+    val partKeyBuilder2 = new RecordBuilder(TestData.nativeMem, 2048)
+    val tags2 = Map(ZeroCopyUTF8String("_ns_") -> ZeroCopyUTF8String("ns"),
+      ZeroCopyUTF8String("_ws_") -> ZeroCopyUTF8String("ws"),
+      ZeroCopyUTF8String("app") -> ZeroCopyUTF8String("app1"),
+      ZeroCopyUTF8String("pod") -> ZeroCopyUTF8String("my-pod"))
+    val partKey2 = partKeyBuilder2.partKeyFromObjects(Schemas.promCounter, "metric1", tags2)
+    val partKeyBytes2 = Schemas.promCounter.partKeySchema.asByteArray(UnsafeUtils.ZeroPointer, partKey2)
+
+
+    // Get count initially
+    assert(session.execute("select count(1) from unittest.card_tracker_part_keys").one().getLong(0) == 0)
+
+    listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, partKey1, Schemas.promCounter.partKeySchema)
+    listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, partKey2, Schemas.promCounter.partKeySchema)
+
+    assert(session.execute("select count(1) from unittest.card_tracker_part_keys").one().getLong(0) == 2)
+
+    val res = session.execute("select namespace from unittest.card_tracker_ns_by_ws where workspace = 'ws'")
+    asScalaSet(res.one().getSet(0, classOf[String])) shouldEqual Set("ns")
+    listener.nsByWsTable.getNamespacesForWorkspace("ws") shouldEqual Set("ns")
+
+    val numts = session.execute("select numts from unittest.card_tracker_metrics_by_ws_ns " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1'")
+
+    numts.one().getInt(0) shouldEqual 2
+
+    val appLabelCardinality = session.execute("select values from unittest.card_tracker_metric_label_cardinality " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1' and label = 'app'")
+
+    // Check the expected cardinality
+    appLabelCardinality.isExhausted shouldEqual false
+    val dict = appLabelCardinality.one().getMap(0, classOf[String], classOf[Integer])
+    dict.size() shouldEqual 1
+    dict.containsKey("app1") shouldEqual true
+    dict.get("app1") shouldEqual 2
+
+    val podLabelCardinality = session.execute("select values from unittest.card_tracker_metric_label_cardinality " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1' and label = 'pod'")
+
+    val dict1 = podLabelCardinality.one().getMap(0, classOf[String], classOf[Integer])
+    dict1.size() shouldEqual 1
+    dict1.containsKey("my-pod") shouldEqual true
+    dict1.get("my-pod") shouldEqual 1
   }
 
   it ("should ensure timeSeriesActivated is idempotent") {
@@ -82,8 +144,15 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
           " where workspace = 'ws' and namespace = 'ns' and metric = 'metric1'")
     numts.one().getInt(0) shouldEqual 1
 
+    val labelValCardinality = session.execute("select values from unittest.card_tracker_metric_label_cardinality " +
+      "where workspace = 'ws' and namespace = 'ns' and metric = 'metric1' and label = 'app'")
 
-    // TODO: Assert other content
+    // Check the expected cardinality
+    labelValCardinality.isExhausted shouldEqual false
+    val dict = labelValCardinality.one().getMap(0, classOf[String], classOf[Integer])
+    dict.size() shouldEqual 1
+    dict.containsKey("app1") shouldEqual true
+    dict.get("app1") shouldEqual 1
   }
 
 }
