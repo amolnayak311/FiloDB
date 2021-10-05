@@ -1,14 +1,16 @@
 package filodb.cassandra.cardtracker
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters.asScalaSet
+
+import org.scalatest.matchers.should.Matchers
+
 import filodb.cassandra.AllTablesTest
 import filodb.core.TestData
 import filodb.core.binaryrecord2.RecordBuilder
 import filodb.core.metadata.{Dataset, Schemas}
 import filodb.memory.format.{UnsafeUtils, ZeroCopyUTF8String}
-import org.scalatest.matchers.should.Matchers
-
-import java.nio.ByteBuffer
 
 class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matchers {
 
