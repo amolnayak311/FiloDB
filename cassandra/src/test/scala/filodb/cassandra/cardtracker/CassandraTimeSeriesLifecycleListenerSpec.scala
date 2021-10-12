@@ -1,6 +1,7 @@
 package filodb.cassandra.cardtracker
 
 import java.nio.ByteBuffer
+import java.security.MessageDigest
 
 import scala.collection.JavaConverters.asScalaSet
 
@@ -39,8 +40,9 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     val defaultPartKey = partKeyBuilder.partKeyFromObjects(Schemas.promCounter, "metric1", tags)
     val partKey = Schemas.promCounter.partKeySchema.asByteArray(UnsafeUtils.ZeroPointer, defaultPartKey)
     // Get count initially
+    val digest = MessageDigest.getInstance("SHA-256")
     val stmt = session.prepare("select count(1) from unittest.card_tracker_part_keys where partkey = ?")
-      .bind(ByteBuffer.wrap(partKey))
+      .bind(ByteBuffer.wrap(digest.digest(partKey)))
     assert(session.execute(stmt).one().getLong(0) == 0)
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert(session.execute(stmt).one().getLong(0) == 1)
@@ -126,8 +128,9 @@ class CassandraTimeSeriesLifecycleListenerSpec extends AllTablesTest with Matche
     val defaultPartKey = partKeyBuilder.partKeyFromObjects(Schemas.promCounter, "metric1", tags)
     val partKey = Schemas.promCounter.partKeySchema.asByteArray(UnsafeUtils.ZeroPointer, defaultPartKey)
     // Get count initially
+    val digest = MessageDigest.getInstance("SHA-256")
     val stmt = session.prepare("select count(1) from unittest.card_tracker_part_keys where partkey = ?")
-      .bind(ByteBuffer.wrap(partKey))
+      .bind(ByteBuffer.wrap(digest.digest(partKey)))
     assert(session.execute(stmt).one().getLong(0) == 0)
     listener.timeSeriesActivated(UnsafeUtils.ZeroPointer, defaultPartKey, Schemas.promCounter.partKeySchema)
     assert( session.execute(stmt).one().getLong(0) == 1)

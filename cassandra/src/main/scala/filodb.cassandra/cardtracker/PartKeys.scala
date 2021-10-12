@@ -1,6 +1,7 @@
 package filodb.cassandra.cardtracker
 
 import java.lang.{Long => JLong}
+import java.security.MessageDigest
 
 import com.datastax.driver.core.ConsistencyLevel
 import scala.concurrent.{ExecutionContext, Future}
@@ -37,12 +38,17 @@ sealed class PartKeys(val dataset: DatasetRef,
       s"WHERE partKey = ? ")
     .setConsistencyLevel(ConsistencyLevel.ONE)
 
-  def writePartKey(partKey: Array[Byte]): Future[Response] =
-      connector.execStmtWithRetries(writePartitionCql.bind(toBuffer(partKey), System.currentTimeMillis(): JLong))
+  def writePartKey(partKey: Array[Byte]): Future[Response] = {
+    val digest = MessageDigest.getInstance("SHA-256")
+    connector.execStmtWithRetries(writePartitionCql.bind(toBuffer(digest.digest(partKey)),
+      System.currentTimeMillis(): JLong))
+  }
 
 
-  def partitionExists(partKey: Array[Byte]): Boolean =
-    session.execute(countCql.bind(toBuffer(partKey))).one().getLong("count") != 0
+  def partitionExists(partKey: Array[Byte]): Boolean = {
+    val digest = MessageDigest.getInstance("SHA-256")
+    session.execute(countCql.bind(toBuffer(digest.digest(partKey)))).one().getLong("count") != 0
+  }
 
 
 }
