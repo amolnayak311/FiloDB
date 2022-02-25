@@ -182,7 +182,9 @@ class PartKeyLuceneIndexSpec extends AnyFunSpec with Matchers with BeforeAndAfte
       keyIndex.addPartKey(partKeyOnHeap(dataset6, ZeroPointer, addr), i, start + i)()
     }
     keyIndex.refreshReadersBlocking()
-
+    val end = System.currentTimeMillis()
+    val total = end - start
+    print(s"Took $total ms")
     val startTimes = keyIndex.startTimeFromPartIds((0 until numPartIds).iterator)
     for { i <- 0 until numPartIds} {
       startTimes(i) shouldEqual start + i

@@ -1,13 +1,15 @@
 package filodb.core.memstore.index.es
 
+import java.util.concurrent.CountDownLatch
+
 import scala.util.Random
 import scala.concurrent.duration._
 
 import com.googlecode.javaewah.IntIterator
+import org.elasticsearch.client.{Response, ResponseListener}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers
-
 
 import filodb.core.{GdeltTestData, TestData}
 import filodb.core.binaryrecord2.RecordBuilder
@@ -57,6 +59,7 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
     }
     val end = System.currentTimeMillis()
     keyIndex.refreshReadersBlocking()
+    Thread.sleep(1000)
 
     // Should get empty iterator when passing no filters
     val partNums1 = keyIndex.partIdsFromFilters(Nil, start, end)
@@ -177,19 +180,35 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
 //  }
 
   it("should add part keys and fetch startTimes correctly for more than 1024 keys") {
-    val numPartIds = 3000 // needs to be more than 1024 to test the lucene term limit
+    // val numPartIds = 3000 // needs to be more than 1024 to test the lucene term limit
+    val numPartIds = 1000
     val start = System.currentTimeMillis()
+    val recordStartTime = 1645672033299L
     // we dont care much about the partKey here, but the startTime against partId.
     val partKeys = Stream.continually(readers.head).take(numPartIds).toList
+    val latch = new CountDownLatch(numPartIds)
+    val handler = new ResponseListener {
+      override def onSuccess(response: Response): Unit = latch.countDown()
+
+      override def onFailure(exception: Exception): Unit = fail("Insertion failed")
+    }
     partKeyFromRecords(dataset6, records(dataset6, partKeys), Some(partBuilder))
       .zipWithIndex.foreach { case (addr, i) =>
-      keyIndex.addPartKey(partKeyOnHeap(dataset6, ZeroPointer, addr), i, start + i)()
+      keyIndex.addPartKeyAsync(partKeyOnHeap(dataset6, ZeroPointer, addr), i, recordStartTime + i)()(handler)
     }
+    latch.await()
     keyIndex.refreshReadersBlocking()
+   val total = System.currentTimeMillis() - start
 
+//    Takes around 30 seconds to add 3000 documents i async mode. Its extremely slow compared to local LuceneIndex
+//    responding in 600/700 ms making it 40X slower
+
+    print(s"Total $total")
+//     takes approx 300 ms for 3000 results
     val startTimes = keyIndex.startTimeFromPartIds((0 until numPartIds).iterator)
+    startTimes.size shouldEqual numPartIds
     for { i <- 0 until numPartIds} {
-      startTimes(i) shouldEqual start + i
+      startTimes(i) shouldEqual recordStartTime + i
     }
   }
 //  TODO: Implement later, exposes Lucene API
