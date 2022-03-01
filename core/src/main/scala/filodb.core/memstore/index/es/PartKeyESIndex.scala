@@ -7,7 +7,7 @@ import java.util.Base64
 import scala.collection.mutable.{Map => MutableMap}
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient
-import co.elastic.clients.elasticsearch._types.FieldValue
+import co.elastic.clients.elasticsearch._types.{FieldSort, FieldValue, SortOptions, SortOrder}
 import co.elastic.clients.elasticsearch._types.query_dsl._
 import co.elastic.clients.elasticsearch.core.SearchRequest
 import co.elastic.clients.elasticsearch.core.search.{Hit, SourceConfig, SourceFilter}
@@ -145,7 +145,20 @@ class PartKeyESIndex(ref: DatasetRef,
     om.writeValueAsString(mapAsJavaMap(map))
   }
 
-  def partIdsEndedBefore(endedBefore: Long): debox.Buffer[Int] = ???
+  def partIdsEndedBefore(endedBefore: Long): debox.Buffer[Int] = {
+    val query = buildQuery(Nil, 0, endTime = endedBefore - 1)
+    val response = client.search((s: SearchRequest.Builder) =>
+      s.size(MAX_NUM_RESULTS)
+        .index(INDEX_NAME)
+        .source( (sc: SourceConfig.Builder) =>
+          sc.filter(
+            (filter: SourceFilter.Builder) => filter.includes(PART_ID)))
+        .query(query), classOf[java.util.Map[String, Int]])
+
+    debox.Buffer.fromIterable(response.hits().hits().stream.mapToInt(
+      (h: Hit[java.util.Map[String, Int]]) => h.source().get(PART_ID).toString().toInt).toArray)
+
+  }
   def removePartKeys(partIds: debox.Buffer[Int]): Unit = ???
   def indexValues(fieldName: String, topK: Int = 100): Seq[TermInfo] = ???
   def indexNames(limit: Int): Seq[String] = ???
@@ -190,12 +203,12 @@ class PartKeyESIndex(ref: DatasetRef,
   def startTimeFromPartIds(partIds: Iterator[Int]): debox.Map[Int, Long] = {
 
     val query = buildQuery(Seq(ColumnFilter(PART_ID, In(partIds.toSet))), startTime = 0, endTime = 0)
-    val factory = new com.fasterxml.jackson.core.JsonFactory
-    val jsonObjectWriter = new java.io.StringWriter
-    val gen = new co.elastic.clients.json.jackson.JacksonJsonpGenerator(factory.createGenerator(jsonObjectWriter))
-    query.serialize(gen, new JacksonJsonpMapper)
-    gen.flush()
-    print(jsonObjectWriter)
+//    val factory = new com.fasterxml.jackson.core.JsonFactory
+//    val jsonObjectWriter = new java.io.StringWriter
+//    val gen = new co.elastic.clients.json.jackson.JacksonJsonpGenerator(factory.createGenerator(jsonObjectWriter))
+//    query.serialize(gen, new JacksonJsonpMapper)
+//    gen.flush()
+//    print(jsonObjectWriter)
     val response = client.search((s: SearchRequest.Builder) =>
       s.size(MAX_NUM_RESULTS)
         .index(INDEX_NAME)
@@ -207,17 +220,61 @@ class PartKeyESIndex(ref: DatasetRef,
     val res = debox.Map.empty[Int, Long]
     response.hits().hits().stream().forEach(
       (x : Hit[java.util.Map[String, _]])=>
-        res.update(x.source().get(PART_ID).toString.toInt, x.source().get(START_TIME).toString.toLong))
+        res.update(x.source().get(PART_ID).asInstanceOf[Int],
+          x.source().get(START_TIME).asInstanceOf[Long].longValue()))
     res
   }
   def endTimeFromPartId(partId: Int): Long = ???
   def partIdsOrderedByEndTime(topk: Int, fromEndTime: Long = 0,
-                              toEndTime: Long = Long.MaxValue): EWAHCompressedBitmap = ???
+                              toEndTime: Long = Long.MaxValue): EWAHCompressedBitmap = {
+
+    val query = buildQuery(Nil, fromEndTime, toEndTime)
+    val response = client.search((s: SearchRequest.Builder) =>
+      s.size(MAX_NUM_RESULTS.min(topk))
+        .index(INDEX_NAME)
+        .sort((so: SortOptions.Builder) => so.field(
+          (fs: FieldSort.Builder) => fs.field(END_TIME).order(SortOrder.Asc)))
+        .source( (sc: SourceConfig.Builder) =>
+          sc.filter(
+            (filter: SourceFilter.Builder) => filter.includes(PART_ID)))
+        .query(query), classOf[java.util.Map[String, Int]])
+    val res = new EWAHCompressedBitmap()
+    response.hits().hits().stream().forEach(
+      (x : Hit[java.util.Map[String, Int]])=> {
+        res.set(x.source().get(END_TIME))
+      })
+    res
+  }
 
 
   def updatePartKeyWithEndTime(partKeyOnHeapBytes: Array[Byte], partId: Int,
                                endTime: Long = Long.MaxValue, partKeyBytesRefOffset: Int = 0)
-                              (partKeyNumBytes: Int = partKeyOnHeapBytes.length): Unit = ???
+                              (partKeyNumBytes: Int = partKeyOnHeapBytes.length): Unit = {
+    val updateEndDate = """{
+      |  "script": {
+      |    "lang": "painless",
+      |    "source": "ctx._source.__endTime__ = params['endTime']",
+      |    "params": {
+      |       "endTime": %d
+      |     }
+      |  },
+      |  "query": {
+      |    "term": {
+      |      "__partId__": {
+      |        "value": "%d"
+      |      }
+      |    }
+      |  },
+      |  "max_docs" : 1
+      |}""".stripMargin.format(endTime, partId)
+    val req = new Request("POST", s"/$INDEX_NAME/_update_by_query")
+    req.addParameter("routing", shardNum.toString)
+    req.setJsonEntity(updateEndDate)
+    val resp = restClient.performRequest(req)
+    logger.info("updatePartKeyWithEndTime for partId=%d with endDate=%d returned statusCode=%d",
+      partId, endTime, resp.getStatusLine.getStatusCode)
+
+  }
 
   // scalastyle:off method.length
   private def buildQuery(columnFilters: Seq[ColumnFilter], startTime: Long, endTime: Long): Query = {
@@ -247,7 +304,16 @@ class PartKeyESIndex(ref: DatasetRef,
                   bool.must((f: Query.Builder) =>
                     f.term((t: TermQuery.Builder) => t.field(column).value(FieldValue.of(value.toString))))
                 case NotEquals(value) =>
-                  ???
+                  val strValue = value.toString
+                  bool.mustNot((f: Query.Builder) =>
+                    f.term((t: TermQuery.Builder) => t.field(column).value(FieldValue.of(strValue))))
+                  if(strValue.isEmpty)
+                    bool.filter(
+                      (filter: Query.Builder) => filter.regexp(
+                        (rb: RegexpQuery.Builder) => rb.field(column).value(".*"))
+                    )
+                  else
+                    bool.filter((filter: Query.Builder) => filter.matchAll((ma: MatchAllQuery.Builder) => ma))
                 case In(values) =>
                   bool.must((m: Query.Builder) => {
                     m.bool((bo: BoolQuery.Builder) => {
@@ -300,7 +366,34 @@ class PartKeyESIndex(ref: DatasetRef,
   // Method name and signature does not make sense,
   def labelNamesFromFilters(columnFilters: Seq[ColumnFilter], startTime: Long, endTime: Long): Int = ???
   def partKeyRecordsFromFilters(columnFilters: Seq[ColumnFilter],
-                                startTime: Long, endTime: Long): Seq[PartKeyLuceneIndexRecord] = ???
+                                startTime: Long, endTime: Long): Seq[PartKeyLuceneIndexRecord] = {
+    val query = buildQuery(columnFilters, startTime, endTime)
+
+    //    val factory = new com.fasterxml.jackson.core.JsonFactory
+    //    val jsonObjectWriter = new java.io.StringWriter
+    //    val gen = new co.elastic.clients.json.jackson.JacksonJsonpGenerator(factory.createGenerator(jsonObjectWriter))
+    //    query.serialize(gen, new JacksonJsonpMapper)
+    //    gen.flush()
+    //    print(jsonObjectWriter)
+
+    val response = client.search((s: SearchRequest.Builder) =>
+      s.size(MAX_NUM_RESULTS)
+        .index(INDEX_NAME)
+        .source( (sc: SourceConfig.Builder) =>
+          sc.filter(
+            (filter: SourceFilter.Builder) => filter.includes(PART_KEY, START_TIME, END_TIME)))
+        .query(query), classOf[java.util.Map[String, Any]])
+
+
+    import scala.collection.JavaConverters.asScalaIteratorConverter;
+    asScalaIteratorConverter(response.hits().hits().iterator()).asScala.toSeq.map( hit => {
+      val map = hit.source()
+      val partKeyBase64: String = map.getOrDefault(PART_KEY, "").asInstanceOf[String]
+      val start = map.getOrDefault(START_TIME, -1L).asInstanceOf[Number].longValue()
+      val end = map.getOrDefault(END_TIME, -1).asInstanceOf[Number].longValue()
+      PartKeyLuceneIndexRecord(Base64.getDecoder.decode(partKeyBase64), start, end)
+    })
+  }
   def partIdFromPartKeySlow(partKeyBase: Any, partKeyOffset: Long): Option[Int] = ???
 
 
@@ -315,7 +408,24 @@ class PartKeyESIndex(ref: DatasetRef,
   }
 
   def refreshReadersBlocking(): Unit = {
-    // Lucene specific, NOP for ES, kept to make the spec happy
+    val req = new Request("POST", s"/$INDEX_NAME/_refresh")
+    val resp = restClient.performRequest(req)
+    logger.info("Got status code {} after refreshing index", resp.getStatusLine.getStatusCode);
+  }
+
+  //IMPORTANT: Only used in test cases
+  private[es] def deleteAll(): Unit = {
+    val query: Query = new Query.Builder().matchAll((v: MatchAllQuery.Builder) => v).build()
+    val req = new Request("POST", s"/$INDEX_NAME/_delete_by_query?conflicts=proceed")
+    req.addParameter("routing", shardNum.toString)
+    req.setJsonEntity("""{
+                        |  "query": {
+                        |    "match_all": {}
+                        |  }
+                        |}""".stripMargin)
+    val resp = restClient.performRequest(req)
+    logger.info("Got status code {} after deleting all", resp.getStatusLine.getStatusCode);
+
   }
 
 }

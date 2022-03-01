@@ -35,6 +35,7 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
 
   before {
     keyIndex.reset()
+    keyIndex.deleteAll()
     keyIndex.refreshReadersBlocking()
   }
 
@@ -59,7 +60,6 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
     }
     val end = System.currentTimeMillis()
     keyIndex.refreshReadersBlocking()
-    Thread.sleep(1000)
 
     // Should get empty iterator when passing no filters
     val partNums1 = keyIndex.partIdsFromFilters(Nil, start, end)
@@ -192,6 +192,7 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
 
       override def onFailure(exception: Exception): Unit = fail("Insertion failed")
     }
+    keyIndex.refreshReadersBlocking()
     partKeyFromRecords(dataset6, records(dataset6, partKeys), Some(partBuilder))
       .zipWithIndex.foreach { case (addr, i) =>
       keyIndex.addPartKeyAsync(partKeyOnHeap(dataset6, ZeroPointer, addr), i, recordStartTime + i)()(handler)
@@ -213,31 +214,23 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
   }
 //  TODO: Implement later, exposes Lucene API
 
-//  it("should add part keys and fetch partIdsEndedBefore and removePartKeys correctly for more than 1024 keys") {
-//    val numPartIds = 3000 // needs to be more than 1024 to test the lucene term limit
-//    val start = 1000
-//    // we dont care much about the partKey here, but the startTime against partId.
-//    val partKeys = Stream.continually(readers.head).take(numPartIds).toList
-//    partKeyFromRecords(dataset6, records(dataset6, partKeys), Some(partBuilder))
-//      .zipWithIndex.foreach { case (addr, i) =>
-//      keyIndex.addPartKey(partKeyOnHeap(dataset6, ZeroPointer, addr), i, start + i, start + i + 100)()
-//    }
-//    keyIndex.refreshReadersBlocking()
-//
-//    val pIds = keyIndex.partIdsEndedBefore(start + 200)
-//    val pIdsList = pIds.toList()
-//    for { i <- 0 until numPartIds} {
-//      pIdsList.contains(i) shouldEqual (if (i <= 100) true else false)
-//    }
-//
-//    keyIndex.removePartKeys(pIds)
-//    keyIndex.refreshReadersBlocking()
-//
-//    for { i <- 0 until numPartIds} {
-//      keyIndex.partKeyFromPartId(i).isDefined shouldEqual (if (i <= 100) false else true)
-//    }
-//
-//  }
+  it("should add part keys and fetch partIdsEndedBefore") {
+    val numPartIds = 10
+    val start = 1000
+    // we dont care much about the partKey here, but the startTime against partId.
+    val partKeys = Stream.continually(readers.head).take(numPartIds).toList
+    partKeyFromRecords(dataset6, records(dataset6, partKeys), Some(partBuilder))
+      .zipWithIndex.foreach { case (addr, i) =>
+      keyIndex.addPartKey(partKeyOnHeap(dataset6, ZeroPointer, addr), i, start + i, start + i + 100)()
+    }
+    keyIndex.refreshReadersBlocking()
+
+    val pIds = keyIndex.partIdsEndedBefore(start + 200)
+    val pIdsList = pIds.toList()
+    for { i <- 0 until numPartIds} {
+      pIdsList.contains(i) shouldEqual (i <= 100)
+    }
+  }
 
   it("should update part keys with endtime and parse filters correctly") {
     val start = System.currentTimeMillis()
@@ -254,18 +247,22 @@ class PartKeyESIndexSpec  extends AnyFunSpec with Matchers with BeforeAndAfter {
 
     // Should get empty iterator when passing no filters
     val partNums1 = keyIndex.partIdsFromFilters(Nil, start, end)
+    partNums1.sort
     partNums1 shouldEqual debox.Buffer(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
     val filter2 = ColumnFilter("Actor2Code", Equals("GOV".utf8))
     val partNums2 = keyIndex.partIdsFromFilters(Seq(filter2), start, end)
+    partNums2.sort
     partNums2 shouldEqual debox.Buffer(7, 8, 9)
 
     val filter3 = ColumnFilter("Actor2Name", Equals("REGIME".utf8))
     val partNums3 = keyIndex.partIdsFromFilters(Seq(filter3), start, end)
+    partNums3.sort
     partNums3 shouldEqual debox.Buffer(8, 9)
 
     val filter4 = ColumnFilter("Actor2Name", Equals("REGIME".utf8))
     val partNums4 = keyIndex.partIdsFromFilters(Seq(filter4), 10, start-1)
+    partNums4.sort
     partNums4 shouldEqual debox.Buffer.empty[Int]
 
     val filter5 = ColumnFilter("Actor2Name", Equals("REGIME".utf8))
