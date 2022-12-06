@@ -44,7 +44,8 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                 ignoring: Seq[String],
                                 include: Seq[String],
                                 metricColumn: String,
-                                outputRvRange: Option[RvRange]) extends NonLeafExecPlan {
+                                outputRvRange: Option[RvRange],
+                                useDiskBasedJoin: Boolean = false) extends NonLeafExecPlan {
 
   require(cardinality != Cardinality.ManyToMany,
     "Many To Many cardinality is not supported for BinaryJoinExec")
@@ -65,8 +66,192 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                  schemas: Observable[(ResultSchema, Int)],
                                  querySession: QuerySession): Observable[RangeVector] = ???
 
-  //scalastyle:off method.length
   protected[exec] def compose(childResponses: Observable[(QueryResult, Int)],
+                              firstSchema: Task[ResultSchema],
+                              querySession: QuerySession): Observable[RangeVector] = {
+    // TODO: Should be driven based on stats/heuristics?
+    if (useDiskBasedJoin) {
+      // Uses secondary store to reduce in-memory footprint, The performance might be slower than inMemoryCompose
+      memoryEfficientCompose(childResponses, firstSchema, querySession)
+    } else
+      inMemoryCompose(childResponses, firstSchema, querySession)
+  }
+
+  trait IntermediateJoinOperationStore {
+
+    /**
+     * On adding one side, the join key for that rv is determined and if a previous RV found, the result
+     * will be stitched. Should be stored in a way to make it efficient to retrieve the one side by join key
+     *
+     * @param rv RangeVector
+     * @param responseSeq the response number received in the childResponses of compose
+     */
+    def addOneSide(rv: RangeVector, responseSeq: Int): Unit
+
+    /**
+     * Gets the oneSide by joinKey
+     *
+     * @param joinKey the joinKey to get the value by
+     * @return the Option of RangeVector based on whether the match was found or not
+     */
+    def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector]
+
+    /**
+     * @return Returns the number of one side entries
+     */
+    def numOneSideEntries: Int
+
+    /**
+     * Simply will add rhe response to the many side, unline one side, no attempt to stitch the values will be
+     * performed with common join keys
+     *
+     * @param rv RangeVector
+     * @param responseSeq the response number received in the childResponses of compose
+     */
+    def addManySide(rv: RangeVector, responseSeq: Int): Unit
+
+    /**
+     *
+     * @return Returns the number of many side entries
+     */
+    def numManySideEntries: Int
+
+    /**
+     * Saves the joined resultss
+     * @param result the result rangeVector
+     * @param otherSide
+     */
+    def saveResult(result: RangeVector, otherSide: RangeVector)
+
+    /**
+     * Cleanup the store and releases resources
+     */
+    def cleanup(): Unit
+
+//    private[exec] def joinKeysHash(rvk: RangeVectorKey, algorithm: String = "MD5"): String = {
+//      // TODO: We can benchmark the performance and see is SHA256 is a steep increase for high cardinality
+//      //  also can make this configurable
+//      val digest = java.security.MessageDigest.getInstance(algorithm)
+//      if (onLabels.nonEmpty) {
+//        rvk.labelValues.foreach {
+//          case (key, value) if onLabels.contains(key) =>
+//              digest.digest(key.asNewByteArray)
+//              digest.digest(value.asNewByteArray)
+//        }
+//      } else {
+//        rvk.labelValues.foreach {
+//          case (key, value) if !ignoringLabelsForJoin.contains(key) =>
+//            digest.digest(key.asNewByteArray)
+//            digest.digest(value.asNewByteArray)
+//        }
+//      }
+//      digest.digest().map("%02x".format(_)).mkString
+//    }
+  }
+
+  class InMemoryIntermediateJoinOperationStore extends IntermediateJoinOperationStore {
+
+    val oneSideMap = new mutable.HashMap[Map[Utf8Str, Utf8Str], RangeVector]()
+
+    val manySide = new mutable.ArrayBuffer[RangeVector]
+
+    override def numOneSideEntries: Int = oneSideMap.size
+
+    override def addOneSide(rv: RangeVector, responseSeq: Int): Unit = {
+      val jk = joinKeys(rv.key)
+      // When spread changes, we need to account for multiple Range Vectors with same key coming from different shards
+      // Each of these range vectors would contain data for different time ranges
+      if (oneSideMap.contains(jk)) {
+        val rvDupe = oneSideMap(jk)
+        if (rv.key.labelValues == rvDupe.key.labelValues) {
+          oneSideMap.put(jk, StitchRvsExec.stitch(rv, rvDupe, outputRvRange))
+        } else {
+          this.cleanup()
+          throw new BadQueryException(s"Cardinality $cardinality was used, but many found instead of one for $jk. " +
+            s"${rvDupe.key.labelValues} and ${rv.key.labelValues} were the violating keys on many side")
+        }
+      } else {
+        oneSideMap.put(jk, rv)
+      }
+    }
+
+    override def addManySide(rv: RangeVector, responseSeq: Int): Unit = manySide.append(rv)
+
+    override def numManySideEntries: Int = manySide.size
+
+    def cleanup(): Unit = {
+
+    }
+
+    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector] = oneSideMap.get(joinKey)
+  }
+  //scalastyle:off method.length
+  private[exec] def memoryEfficientCompose(childResponses: Observable[(QueryResult, Int)],
+                                   firstSchema: Task[ResultSchema],
+                                   querySession: QuerySession): Observable[RangeVector] = {
+
+    val numLhsExec = lhs.size
+    val x = childResponses.foldLeft(new InMemoryIntermediateJoinOperationStore()) {
+              case (store, (qr, i)) =>
+                // index number in the childResponse is in same order as the Seq[ExecPlan]. Thus, based on cardinality
+                // either lhs or rhs is one size of the join operation. We will accordingly add the rangeVectors from
+                // the QueryResult determined by te
+                if (cardinality == Cardinality.OneToMany) {
+                  // LHS is the one side and RHS is the many side
+                  // TODO: What about OneToOne?
+                  if (i < numLhsExec)
+                    qr.result.foreach(store.addOneSide(_, i))
+                  else
+                    qr.result.foreach(store.addManySide(_, i))
+                } else {
+                  // LHS becomes the many side and RHS is the one side
+                  if (i < numLhsExec)
+                    qr.result.foreach(store.addManySide(_, i))
+                  else
+                    qr.result.foreach(store.addOneSide(_, i))
+                }
+                store
+            }.map(store =>
+                  store.manySide.foreach(
+                    rvOther => {
+                      val jk = joinKeys(rvOther.key)
+                      store.oneSideByJoinKey(jk) match
+                      {
+                        case Some(rvOne) =>
+                          val resKey = resultKeys(rvOne.key, rvOther.key)
+                          val rvOtherCorrect = if (results.contains(resKey)) {
+                            val resVal = results(resKey)
+                            if (resVal.stitchedOtherSide.key.labelValues == rvOther.key.labelValues) {
+                              StitchRvsExec.stitch(rvOther, resVal.stitchedOtherSide, outputRvRange)
+                            } else {
+                              throw new BadQueryException(s"Non-unique result vectors " +
+                                s"${resVal.stitchedOtherSide.key.labelValues} and ${rvOther.key.labelValues} " +
+                                s"found for $resKey . Use grouping to create unique matching")
+                            }
+                          } else {
+                            rvOther
+                          }
+                        // OneToOne cardinality case is already handled. this condition handles OneToMany case
+                          if (results.size >= queryContext.plannerParams.joinQueryCardLimit)
+                            throw new BadQueryException(
+                              s"The result of this join query has cardinality ${results.size} and " +
+                              s"has reached the limit of ${queryContext.plannerParams.joinQueryCardLimit}." +
+                                s" Try applying more filters.")
+
+                          val res = if (cardinality == Cardinality.OneToMany) binOp(rvOne.rows, rvOtherCorrect.rows)
+                                    else binOp(rvOtherCorrect.rows, rvOne.rows)
+                          results.put(resKey, ResultVal(IteratorBackedRangeVector(resKey, res, period), rvOtherCorrect))
+
+                        case None =>
+                      }
+                  })
+
+            )
+    ???
+  }
+
+
+  private[exec] def inMemoryCompose(childResponses: Observable[(QueryResult, Int)],
                               firstSchema: Task[ResultSchema],
                               querySession: QuerySession): Observable[RangeVector] = {
     val span = Kamon.currentSpan()
@@ -146,6 +331,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
     }
     Observable.fromTask(taskOfResults).flatten
   }
+  //scalastyle:on method.length
 
   private def joinKeys(rvk: RangeVectorKey): Map[Utf8Str, Utf8Str] = {
     if (onLabels.nonEmpty) rvk.labelValues.filter(lv => onLabels.contains(lv._1))
