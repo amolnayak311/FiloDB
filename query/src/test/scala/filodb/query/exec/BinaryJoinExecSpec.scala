@@ -320,6 +320,7 @@ class BinaryJoinExecSpec extends AnyFunSpec with Matchers with ScalaFutures {
     }
   }
 
+  // TODO: Fixme
   it("should throw error if OneToOne cardinality passed, but ManyToOne") {
 
     val duplicate: RangeVector = new RangeVector {
@@ -512,6 +513,7 @@ class BinaryJoinExecSpec extends AnyFunSpec with Matchers with ScalaFutures {
     result.map(_.key).toSet.size shouldEqual 200
   }
 
+  // TODO: Fixme
   it("should throw BadQueryException - one-to-one with ignoring - cardinality limit 1") {
     val queryContext = QueryContext(plannerParams= PlannerParams(joinQueryCardLimit = 1)) // set join card limit to 1
     val execPlan = BinaryJoinExec(queryContext, dummyDispatcher,
@@ -537,6 +539,7 @@ class BinaryJoinExecSpec extends AnyFunSpec with Matchers with ScalaFutures {
       "limit of 1. Try applying more filters or reduce time range."
   }
 
+  // TODO: Fixme
   it("should throw BadQueryException - one-to-one with on - cardinality limit 1") {
     val queryContext = QueryContext(plannerParams = PlannerParams(joinQueryCardLimit = 1)) // set join card limit to 1
     val execPlan = BinaryJoinExec(queryContext, dummyDispatcher,

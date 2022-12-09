@@ -45,7 +45,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                 include: Seq[String],
                                 metricColumn: String,
                                 outputRvRange: Option[RvRange],
-                                useDiskBasedJoin: Boolean = false) extends NonLeafExecPlan {
+                                useDiskBasedJoin: Boolean = true) extends NonLeafExecPlan {
 
   require(cardinality != Cardinality.ManyToMany,
     "Many To Many cardinality is not supported for BinaryJoinExec")
@@ -117,11 +117,24 @@ final case class BinaryJoinExec(queryContext: QueryContext,
     def numManySideEntries: Int
 
     /**
-     * Saves the joined resultss
-     * @param result the result rangeVector
-     * @param otherSide
+     * Saves the key along with oneSide and the other side
+     * @param key: the rangevector key of the pair
+     * @param oneSide the oneside of the pair
+     * @param otherSide otherSide, which can be Many and we may need to stitch them
      */
-    def saveResult(result: RangeVector, otherSide: RangeVector)
+    def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit
+
+    /**
+     * Gets the number of pairs added to the store
+     * @return the count of the number of pairs added
+     */
+    def numPairs(): Int
+
+    /**
+     *
+     * @return Iterable of all the pairs added. The Iterable is a three tuple of key, one side and other side of join
+     */
+    def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)]
 
     /**
      * Cleanup the store and releases resources
@@ -152,6 +165,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
   class InMemoryIntermediateJoinOperationStore extends IntermediateJoinOperationStore {
 
     val oneSideMap = new mutable.HashMap[Map[Utf8Str, Utf8Str], RangeVector]()
+    val pairs = new mutable.HashMap[RangeVectorKey, (RangeVector, RangeVector)]
 
     val manySide = new mutable.ArrayBuffer[RangeVector]
 
@@ -184,6 +198,34 @@ final case class BinaryJoinExec(queryContext: QueryContext,
     }
 
     override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector] = oneSideMap.get(joinKey)
+
+    /**
+     * Saves the key along with oneSide and the other side
+     *
+     * @param key       the rangevector key of the pair
+     * @param oneSide   the oneside of the pair
+     * @param otherSide otherSide, which can be Many and we may need to stitch them
+     */
+    override def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit =
+      pairs.update(key, pairs.get(key) match {
+        case Some((_, other))  => (oneSide, StitchRvsExec.stitch(otherSide, other, outputRvRange))
+        case None              => (oneSide, otherSide)
+      })
+
+
+    /**
+     * Gets the number of pairs added to the store
+     *
+     * @return the count of the number of pairs added
+     */
+    override def numPairs(): Int = pairs.size
+
+    /**
+     *
+     * @return Iterable of all the pairs added. The Iterable is a three tuple of key, one side and other side of join
+     */
+    override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] =
+      pairs.iterator.map{ case(key, (one, other)) =>  (key, one, other)}.toIterable
   }
   //scalastyle:off method.length
   private[exec] def memoryEfficientCompose(childResponses: Observable[(QueryResult, Int)],
@@ -191,7 +233,8 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                    querySession: QuerySession): Observable[RangeVector] = {
 
     val numLhsExec = lhs.size
-    val x = childResponses.foldLeft(new InMemoryIntermediateJoinOperationStore()) {
+    val store = new InMemoryIntermediateJoinOperationStore()
+    childResponses.foldLeft(store) {
               case (store, (qr, i)) =>
                 // index number in the childResponse is in same order as the Seq[ExecPlan]. Thus, based on cardinality
                 // either lhs or rhs is one size of the join operation. We will accordingly add the rangeVectors from
@@ -211,43 +254,43 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                     qr.result.foreach(store.addOneSide(_, i))
                 }
                 store
-            }.map(store =>
-                  store.manySide.foreach(
-                    rvOther => {
-                      val jk = joinKeys(rvOther.key)
-                      store.oneSideByJoinKey(jk) match
-                      {
-                        case Some(rvOne) =>
-                          val resKey = resultKeys(rvOne.key, rvOther.key)
-                          val rvOtherCorrect = if (results.contains(resKey)) {
-                            val resVal = results(resKey)
-                            if (resVal.stitchedOtherSide.key.labelValues == rvOther.key.labelValues) {
-                              StitchRvsExec.stitch(rvOther, resVal.stitchedOtherSide, outputRvRange)
-                            } else {
-                              throw new BadQueryException(s"Non-unique result vectors " +
-                                s"${resVal.stitchedOtherSide.key.labelValues} and ${rvOther.key.labelValues} " +
-                                s"found for $resKey . Use grouping to create unique matching")
-                            }
-                          } else {
-                            rvOther
-                          }
-                        // OneToOne cardinality case is already handled. this condition handles OneToMany case
-                          if (results.size >= queryContext.plannerParams.joinQueryCardLimit)
-                            throw new BadQueryException(
-                              s"The result of this join query has cardinality ${results.size} and " +
-                              s"has reached the limit of ${queryContext.plannerParams.joinQueryCardLimit}." +
-                                s" Try applying more filters.")
-
-                          val res = if (cardinality == Cardinality.OneToMany) binOp(rvOne.rows, rvOtherCorrect.rows)
-                                    else binOp(rvOtherCorrect.rows, rvOne.rows)
-                          results.put(resKey, ResultVal(IteratorBackedRangeVector(resKey, res, period), rvOtherCorrect))
-
-                        case None =>
-                      }
-                  })
-
-            )
-    ???
+            }.flatMap(store => {
+      store.manySide.foreach(
+        rvOther => {
+          querySession.qContext.checkQueryTimeout(this.getClass.getName)
+          val jk = joinKeys(rvOther.key)
+          store.oneSideByJoinKey(jk) match {
+            case Some(rvOne) =>
+              val resKey = resultKeys(rvOne.key, rvOther.key)
+              store.addPair(resKey, rvOne, rvOther)
+    //                          val rvOtherCorrect = if (results.contains(resKey)) {
+    //                            val resVal = results(resKey)
+    //                            if (resVal.stitchedOtherSide.key.labelValues == rvOther.key.labelValues) {
+    //                              StitchRvsExec.stitch(rvOther, resVal.stitchedOtherSide, outputRvRange)
+    //                            } else {
+    //                              throw new BadQueryException(s"Non-unique result vectors " +
+    //                                s"${resVal.stitchedOtherSide.key.labelValues} and ${rvOther.key.labelValues} " +
+    //                                s"found for $resKey . Use grouping to create unique matching")
+    //                            }
+    //                          } else {
+    //                            rvOther
+    //                          }
+              // OneToOne cardinality case is already handled. this condition handles OneToMany case
+              if (store.numPairs() >= queryContext.plannerParams.joinQueryCardLimit)
+                throw new BadQueryException(
+                  s"The result of this join query has cardinality ${store.numPairs()} and " +
+                    s"has reached the limit of ${queryContext.plannerParams.joinQueryCardLimit}." +
+                    s" Try applying more filters.")
+            case None =>
+          }
+        })
+      Observable.fromIterable(store.iteratePairs.map{
+        case (key, one, other) =>
+          val res = if (cardinality == Cardinality.OneToMany) binOp(one.rows, other.rows)
+          else binOp(one.rows, other.rows)
+          IteratorBackedRangeVector(key, res, outputRvRange)
+      })
+    }).guarantee(Task.eval{store.cleanup()})
   }
 
 
