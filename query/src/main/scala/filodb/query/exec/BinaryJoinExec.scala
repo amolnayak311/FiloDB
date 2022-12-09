@@ -45,7 +45,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                 include: Seq[String],
                                 metricColumn: String,
                                 outputRvRange: Option[RvRange],
-                                useDiskBasedJoin: Boolean = true) extends NonLeafExecPlan {
+                                useDiskBasedJoin: Boolean = false) extends NonLeafExecPlan {
 
   require(cardinality != Cardinality.ManyToMany,
     "Many To Many cardinality is not supported for BinaryJoinExec")
