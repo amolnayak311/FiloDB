@@ -3,6 +3,8 @@ package filodb.query.exec
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import com.esotericsoftware.kryo.Kryo
+import com.twitter.chill.ScalaKryoInstantiator
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import monix.eval.Task
@@ -73,6 +75,15 @@ trait ExecPlan extends QueryCommand {
     * will supply this parameter
     */
   def dispatcher: PlanDispatcher
+
+  val kryoThreadLocal = new ThreadLocal[Kryo]() {
+    override def initialValue(): Kryo = {
+      val instantiator = new ScalaKryoInstantiator
+      val k = instantiator.newKryo()
+      k.register(classOf[SerializedRangeVector])
+      k
+    }
+  }
 
   /**
     * The list of RangeVector transformations that will be done

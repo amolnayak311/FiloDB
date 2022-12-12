@@ -1,11 +1,15 @@
 package filodb.query.exec
 
-import scala.collection.mutable
-
+import com.esotericsoftware.kryo.io.{Input, Output}
+import java.io.{File, FileInputStream, FileOutputStream}
+import java.nio.file.Files
+import java.util.UUID
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import monix.eval.Task
 import monix.reactive.Observable
+import scala.collection.mutable
+import scala.util.Using
 
 import filodb.core.query._
 import filodb.memory.format.{RowReader, ZeroCopyUTF8String => Utf8Str}
@@ -45,7 +49,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                 include: Seq[String],
                                 metricColumn: String,
                                 outputRvRange: Option[RvRange],
-                                useDiskBasedJoin: Boolean = false) extends NonLeafExecPlan {
+                                useDiskBasedJoin: Boolean = true) extends NonLeafExecPlan {
 
   require(cardinality != Cardinality.ManyToMany,
     "Many To Many cardinality is not supported for BinaryJoinExec")
@@ -111,6 +115,12 @@ final case class BinaryJoinExec(queryContext: QueryContext,
     def addManySide(rv: RangeVector, responseSeq: Int): Unit
 
     /**
+     * Gets the Iterator to the many side
+     * @return Iterator to many side
+     */
+    def manySideIterator: Iterator[RangeVector]
+
+    /**
      *
      * @return Returns the number of many side entries
      */
@@ -149,25 +159,89 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      */
     def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector]
 
-//    private[exec] def joinKeysHash(rvk: RangeVectorKey, algorithm: String = "MD5"): String = {
-//      // TODO: We can benchmark the performance and see is SHA256 is a steep increase for high cardinality
-//      //  also can make this configurable
-//      val digest = java.security.MessageDigest.getInstance(algorithm)
-//      if (onLabels.nonEmpty) {
-//        rvk.labelValues.foreach {
-//          case (key, value) if onLabels.contains(key) =>
-//              digest.digest(key.asNewByteArray)
-//              digest.digest(value.asNewByteArray)
-//        }
-//      } else {
-//        rvk.labelValues.foreach {
-//          case (key, value) if !ignoringLabelsForJoin.contains(key) =>
-//            digest.digest(key.asNewByteArray)
-//            digest.digest(value.asNewByteArray)
-//        }
-//      }
-//      digest.digest().map("%02x".format(_)).mkString
-//    }
+  }
+
+  /**
+   * Simple implementation that writes the
+   */
+  class DiskBasedIntermediateJoinOperationStore(dir: File =
+                                                Files.createTempDirectory(UUID.randomUUID().toString).toFile)
+    extends IntermediateJoinOperationStore {
+
+      var oneSideEntries = 0
+
+      private[exec] def joinKeysHash(key: Map[Utf8Str, Utf8Str], algorithm: String = "MD5"): String = {
+        // TODO: We can benchmark the performance and see is SHA256 is a steep increase for high cardinality
+        //  also can make this configurable
+        val digest = java.security.MessageDigest.getInstance(algorithm)
+        if (onLabels.nonEmpty) {
+          key.foreach {
+            case (k, v) if onLabels.contains(k) =>
+                digest.digest(k.asNewByteArray)
+                digest.digest(v.asNewByteArray)
+          }
+        } else {
+          key.foreach {
+            case (k, v) if !ignoringLabelsForJoin.contains(k) =>
+              digest.digest(k.asNewByteArray)
+              digest.digest(v.asNewByteArray)
+          }
+        }
+        digest.digest().map("%02x".format(_)).mkString
+      }
+
+    override def addOneSide(rv: RangeVector, responseSeq: Int): Unit = {
+      Using.Manager {
+        mgr =>
+          val jk = joinKeys(rv.key)
+          val jkHash = joinKeysHash(jk)
+          val oneFile = new File(dir, s"one_$jkHash")
+          if (oneFile.exists()) {
+            val inStr = mgr(new FileInputStream(oneFile))
+            val outStr = mgr(new FileOutputStream(oneFile))
+            val rvDupe = kryoThreadLocal.get().readObject(new Input(inStr), classOf[SerializedRangeVector])
+            if (rv.key.labelValues == rvDupe.key.labelValues) {
+              val stitched =
+                SerializedRangeVector.apply(StitchRvsExec.stitch(rv, rvDupe, outputRvRange), rvDupe.schema.columns)
+              kryoThreadLocal.get().writeObject(new Output(outStr), stitched)
+            } else {
+              this.cleanup()
+              throw new BadQueryException(s"Cardinality $cardinality was used, but many found instead of one for $jk" +
+                s"${rvDupe.key.labelValues} and ${rv.key.labelValues} were the violating keys on many side")
+            }
+          } else {
+            val outStr = mgr(new FileOutputStream(oneFile))
+            kryoThreadLocal.get().writeObject(new Output(outStr), rv)
+            oneSideEntries += 1
+          }
+      }
+    }
+
+    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector] = ???
+
+    override def numOneSideEntries: Int = oneSideEntries
+
+    override def addManySide(rv: RangeVector, responseSeq: Int): Unit = ???
+
+    override def numManySideEntries: Int = ???
+
+    override def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit = ???
+
+    override def numPairs(): Int = ???
+
+    override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] = ???
+
+
+
+    override def cleanup(): Unit = {
+
+    }
+//      Files.walk(dir.toPath)
+//        .map(_.toFile).forEach(_.delete)
+
+    override def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector] = ???
+
+    override def manySideIterator: Iterator[RangeVector] = ???
   }
 
   class InMemoryIntermediateJoinOperationStore extends IntermediateJoinOperationStore {
@@ -243,6 +317,13 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      */
     override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] =
       pairs.iterator.map{ case(key, (one, other)) =>  (key, one, other)}.toIterable
+
+    /**
+     * Gets the Iterator to the many side
+     *
+     * @return Iterator to many side
+     */
+    override def manySideIterator: Iterator[RangeVector] = manySide.iterator
   }
   //scalastyle:off method.length
   private[exec] def memoryEfficientCompose(childResponses: Observable[(QueryResult, Int)],
@@ -250,7 +331,8 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                                    querySession: QuerySession): Observable[RangeVector] = {
 
     val numLhsExec = lhs.size
-    val store = new InMemoryIntermediateJoinOperationStore()
+    //val store = new InMemoryIntermediateJoinOperationStore()
+    val store = new DiskBasedIntermediateJoinOperationStore()
     childResponses.foldLeft(store) {
               case (store, (qr, i)) =>
                   if (qr.result.size  > queryContext.plannerParams.joinQueryCardLimit
@@ -279,7 +361,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                 }
                 store
             }.flatMap(store => {
-      store.manySide.foreach(
+      store.manySideIterator.foreach(
         rvOther => {
           querySession.qContext.checkQueryTimeout(this.getClass.getName)
           val jk = joinKeys(rvOther.key)
