@@ -2,7 +2,7 @@ package filodb.query.exec
 
 import com.esotericsoftware.kryo.io.{Input, Output}
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.nio.file.Files
+// import java.nio.file.Files
 import java.util.UUID
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
@@ -15,7 +15,12 @@ import filodb.core.query._
 import filodb.memory.format.{RowReader, ZeroCopyUTF8String => Utf8Str}
 import filodb.memory.format.ZeroCopyUTF8String._
 import filodb.query._
+import filodb.query.Query.qLogger
 import filodb.query.exec.binaryOp.BinaryOperatorFunction
+
+import scala.collection.parallel.ParSeq
+
+
 
 /**
   * Binary join operator between results of lhs and rhs plan.
@@ -118,7 +123,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      * Gets the Iterator to the many side
      * @return Iterator to many side
      */
-    def manySideIterator: Iterator[SerializedRangeVector]
+    def manySideIterator: ParSeq[SerializedRangeVector]
 
     /**
      *
@@ -165,9 +170,12 @@ final case class BinaryJoinExec(queryContext: QueryContext,
    * Simple implementation that writes the
    */
   class DiskBasedIntermediateJoinOperationStore(dir: File =
-                                                new File(
-                                                  Files.createTempDirectory("bJoinStore").toFile,
-                                                  UUID.randomUUID().toString()))
+                                                  new File(new File("/tmp/ramdisk/bJoinStore"),
+                                                    UUID.randomUUID().toString())
+//                                                new File(
+//                                                  Files.createTempDirectory("bJoinStore").toFile,
+//                                                  UUID.randomUUID().toString())
+  )
     extends IntermediateJoinOperationStore {
 
       dir.mkdirs()
@@ -270,7 +278,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
       Using.Manager {
         mgr =>
           val keyHash = joinKeysHash(key.labelValues, hashAllKeys = true)
-          val otherFile = new File(dir, s"other_$keyHash")
+          val otherFile = new File(dir, s"otherSide_$keyHash")
           if (otherFile.exists()) {
             val other = kryoThreadLocal.get().readObject(
               mgr(new Input(new FileInputStream(otherFile))), classOf[SerializedRangeVector])
@@ -285,7 +293,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                 s"${other.key.labelValues} and ${otherSide.key.labelValues} " +
                 s"found for $key . Use grouping to create unique matching")
           } else {
-            writeRvToFile(new File(dir, s"one_$keyHash"), oneSide, mgr)
+            writeRvToFile(new File(dir, s"oneSide_$keyHash"), oneSide, mgr)
             writeRvToFile(otherFile, otherSide, mgr)
             val keyFile = new File(dir, s"pairKey_$keyHash")
             kryoThreadLocal.get().writeObject(mgr(new Output(new FileOutputStream(keyFile))), key.labelValues)
@@ -303,10 +311,10 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                   val keyHash = keyFile.toString
                     .substring(keyFile.toString.lastIndexOf(File.separator)).substring("pairKey_".size + 1)
                   val oneRv = kryoThreadLocal.get().readObject(mgr(new Input(
-                    new FileInputStream(new File(dir, s"one_$keyHash")))),
+                    new FileInputStream(new File(dir, s"oneSide_$keyHash")))),
                                 classOf[SerializedRangeVector])
                   val otherRv = kryoThreadLocal.get().readObject(mgr(new Input(
-                    new FileInputStream(new File(dir, s"other_$keyHash")))), classOf[SerializedRangeVector])
+                    new FileInputStream(new File(dir, s"otherSide_$keyHash")))), classOf[SerializedRangeVector])
 
                   val keyFileIn = new FileInputStream(keyFile)
                   val keys = kryoThreadLocal.get().readObject(mgr(new Input(keyFileIn)),
@@ -337,8 +345,9 @@ final case class BinaryJoinExec(queryContext: QueryContext,
 
     }
 
-    override def manySideIterator: Iterator[SerializedRangeVector] =
-        dir.listFiles((_, name) => name.startsWith("many_")).iterator.map( file =>
+    override def manySideIterator: ParSeq[SerializedRangeVector] =
+      // Increases memory footprint
+        dir.listFiles((_, name) => name.startsWith("many_")).toStream.par.map( file =>
           Using.Manager {
             mgr =>
               kryoThreadLocal.get().readObject(
@@ -439,8 +448,10 @@ final case class BinaryJoinExec(queryContext: QueryContext,
     val numLhsExec = lhs.size
     //val store = new InMemoryIntermediateJoinOperationStore()
     val store = new DiskBasedIntermediateJoinOperationStore()
+    var ctr = 0
     childResponses.foldLeft(store) {
               case (store, (qr, i)) =>
+                qLogger.debug("==============Starting fold operation===========")
                   if (qr.result.size  > queryContext.plannerParams.joinQueryCardLimit
                     && cardinality == Cardinality.OneToOne)
                     throw new BadQueryException(
@@ -455,20 +466,25 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                   // LHS is the one side and RHS is the many side
                   // TODO: What about OneToOne?
                   if (i < numLhsExec)
-                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
+                    qr.result.par.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
                   else
-                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
+                    qr.result.par.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
                 } else {
                   // LHS becomes the many side and RHS is the one side
                   if (i < numLhsExec)
-                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
+                    qr.result.par.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
                   else
-                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
+                    qr.result.par.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
                 }
+                qLogger.debug("==============Ending fold operation===========")
                 store
+
             }.flatMap(store => {
+      qLogger.debug("==============Starting iteration on many side===========")
       store.manySideIterator.foreach(
         rvOther => {
+          ctr += 1
+          val start = System.currentTimeMillis()
           querySession.qContext.checkQueryTimeout(this.getClass.getName)
           val jk = joinKeys(rvOther.key)
           store.oneSideByJoinKey(jk) match {
@@ -481,9 +497,12 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                   s"The result of this join query has cardinality ${store.numPairs()} and " +
                     s"has reached the limit of ${queryContext.plannerParams.joinQueryCardLimit}." +
                     s" Try applying more filters.")
+              val total = System.currentTimeMillis() - start
+              qLogger.debug(s"=================Added pair $ctr in $total millis=================")
             case None =>
           }
         })
+      qLogger.debug("==============Ending iteration on many side===========")
       Observable.fromIterator(Task.eval {
         store.iteratePairs.map {
           case (key, one, other) =>
