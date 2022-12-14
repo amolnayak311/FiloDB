@@ -208,8 +208,10 @@ class BinaryJoinExecSpec extends AnyFunSpec with Matchers with ScalaFutures {
       .toListL.runToFuture.futureValue
 
     result.size shouldEqual 2
-    result(1).key.labelValues.contains("_pi_".utf8) shouldEqual true
-    result(0).key.labelValues.contains("_step_".utf8) shouldEqual true
+    // exactly one should contain _pi_ and one contain _step_
+    (result(1).key.labelValues.contains("_pi_".utf8) ^ result(0).key.labelValues.contains("_pi_".utf8)) shouldEqual true
+    (result(1).key.labelValues.contains("_step_".utf8) ^ result(0).key.labelValues.contains("_step_".utf8)) shouldEqual true
+
 
   }
 

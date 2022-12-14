@@ -90,7 +90,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      * @param rv RangeVector
      * @param responseSeq the response number received in the childResponses of compose
      */
-    def addOneSide(rv: RangeVector, responseSeq: Int): Unit
+    def addOneSide(rv: SerializedRangeVector, responseSeq: Int): Unit
 
     /**
      * Gets the oneSide by joinKey
@@ -98,7 +98,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      * @param joinKey the joinKey to get the value by
      * @return the Option of RangeVector based on whether the match was found or not
      */
-    def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector]
+    def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[SerializedRangeVector]
 
     /**
      * @return Returns the number of one side entries
@@ -112,13 +112,13 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      * @param rv RangeVector
      * @param responseSeq the response number received in the childResponses of compose
      */
-    def addManySide(rv: RangeVector, responseSeq: Int): Unit
+    def addManySide(rv: SerializedRangeVector, responseSeq: Int): Unit
 
     /**
      * Gets the Iterator to the many side
      * @return Iterator to many side
      */
-    def manySideIterator: Iterator[RangeVector]
+    def manySideIterator: Iterator[SerializedRangeVector]
 
     /**
      *
@@ -132,7 +132,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      * @param oneSide the oneside of the pair
      * @param otherSide otherSide, which can be Many and we may need to stitch them
      */
-    def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit
+    def addPair(key: RangeVectorKey, oneSide: SerializedRangeVector, otherSide: SerializedRangeVector): Unit
 
     /**
      * Gets the number of pairs added to the store
@@ -144,7 +144,7 @@ final case class BinaryJoinExec(queryContext: QueryContext,
      *
      * @return Iterable of all the pairs added. The Iterable is a three tuple of key, one side and other side of join
      */
-    def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)]
+    def iteratePairs: Iterator[(RangeVectorKey, RangeVector, RangeVector)]
 
     /**
      * Cleanup the store and releases resources
@@ -165,32 +165,51 @@ final case class BinaryJoinExec(queryContext: QueryContext,
    * Simple implementation that writes the
    */
   class DiskBasedIntermediateJoinOperationStore(dir: File =
-                                                Files.createTempDirectory(UUID.randomUUID().toString).toFile)
+                                                new File(
+                                                  Files.createTempDirectory("bJoinStore").toFile,
+                                                  UUID.randomUUID().toString()))
     extends IntermediateJoinOperationStore {
 
+      dir.mkdirs()
       var oneSideEntries = 0
+      var manySideEntries = 0
+      var pairs = 0
 
-      private[exec] def joinKeysHash(key: Map[Utf8Str, Utf8Str], algorithm: String = "MD5"): String = {
+      private[exec] def joinKeysHash(key: Map[Utf8Str, Utf8Str], algorithm: String = "MD5",
+                                     hashAllKeys: Boolean = false): String = {
+
         // TODO: We can benchmark the performance and see is SHA256 is a steep increase for high cardinality
         //  also can make this configurable
         val digest = java.security.MessageDigest.getInstance(algorithm)
-        if (onLabels.nonEmpty) {
+        if (hashAllKeys)
           key.foreach {
-            case (k, v) if onLabels.contains(k) =>
-                digest.digest(k.asNewByteArray)
-                digest.digest(v.asNewByteArray)
+            case (k, v)  =>
+              digest.update(k.asNewByteArray)
+              digest.update(v.asNewByteArray)
           }
-        } else {
-          key.foreach {
-            case (k, v) if !ignoringLabelsForJoin.contains(k) =>
-              digest.digest(k.asNewByteArray)
-              digest.digest(v.asNewByteArray)
+        else {
+          if (onLabels.nonEmpty) {
+            key.foreach {
+              case (k, v) if onLabels.contains(k) =>
+                digest.update(k.asNewByteArray)
+                digest.update(v.asNewByteArray)
+              case _ => //NOP
+            }
+          } else {
+            key.foreach {
+              case (k, v) if !ignoringLabelsForJoin.contains(k) =>
+                digest.update(k.asNewByteArray)
+                digest.update(v.asNewByteArray)
+              case _ => // NOP
+            }
           }
         }
+
+
         digest.digest().map("%02x".format(_)).mkString
       }
 
-    override def addOneSide(rv: RangeVector, responseSeq: Int): Unit = {
+    override def addOneSide(rv: SerializedRangeVector, responseSeq: Int): Unit = {
       Using.Manager {
         mgr =>
           val jk = joinKeys(rv.key)
@@ -198,133 +217,220 @@ final case class BinaryJoinExec(queryContext: QueryContext,
           val oneFile = new File(dir, s"one_$jkHash")
           if (oneFile.exists()) {
             val inStr = mgr(new FileInputStream(oneFile))
-            val outStr = mgr(new FileOutputStream(oneFile))
-            val rvDupe = kryoThreadLocal.get().readObject(new Input(inStr), classOf[SerializedRangeVector])
+            val rvDupe = kryoThreadLocal.get().readObject(mgr(new Input(inStr)), classOf[SerializedRangeVector])
             if (rv.key.labelValues == rvDupe.key.labelValues) {
               val stitched =
                 SerializedRangeVector.apply(StitchRvsExec.stitch(rv, rvDupe, outputRvRange), rvDupe.schema.columns)
-              kryoThreadLocal.get().writeObject(new Output(outStr), stitched)
+              writeRvToFile(oneFile, stitched, mgr)
             } else {
               this.cleanup()
               throw new BadQueryException(s"Cardinality $cardinality was used, but many found instead of one for $jk" +
                 s"${rvDupe.key.labelValues} and ${rv.key.labelValues} were the violating keys on many side")
             }
           } else {
-            val outStr = mgr(new FileOutputStream(oneFile))
-            kryoThreadLocal.get().writeObject(new Output(outStr), rv)
+            writeRvToFile(oneFile, rv, mgr)
             oneSideEntries += 1
           }
       }
     }
 
-    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector] = ???
+    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[SerializedRangeVector] = {
+      val jkHash = joinKeysHash(joinKey)
+      val oneFile = new File(dir, s"one_$jkHash")
+      if (oneFile.exists()) {
+        Using.Manager {
+          use =>
+            val inStr = use(new FileInputStream(oneFile))
+            // TODO: deserialization errors are not handled, they will be thrown back
+            val rv = kryoThreadLocal.get().readObject(use(new Input(inStr)), classOf[SerializedRangeVector])
+            Some(rv)
+        }.get
+      } else
+        None
+    }
 
     override def numOneSideEntries: Int = oneSideEntries
 
-    override def addManySide(rv: RangeVector, responseSeq: Int): Unit = ???
-
-    override def numManySideEntries: Int = ???
-
-    override def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit = ???
-
-    override def numPairs(): Int = ???
-
-    override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] = ???
+    private def writeRvToFile(file: File, rv: RangeVector, mgr: Using.Manager): Unit =
+      kryoThreadLocal.get().writeObject(mgr(new Output(new FileOutputStream(file))), rv)
 
 
+    override def addManySide(rv: SerializedRangeVector, responseSeq: Int): Unit =
+      Using.Manager {
+        mgr =>
+          val hash = joinKeysHash(rv.key.labelValues, hashAllKeys = true)
+          val manyFile = new File(dir, s"many_$hash")
+          writeRvToFile(manyFile, rv, mgr)
+          manySideEntries += 1
+      }
+
+    override def numManySideEntries: Int = manySideEntries
+
+    override def addPair(key: RangeVectorKey, oneSide: SerializedRangeVector, otherSide: SerializedRangeVector): Unit =
+      Using.Manager {
+        mgr =>
+          val keyHash = joinKeysHash(key.labelValues, hashAllKeys = true)
+          val otherFile = new File(dir, s"other_$keyHash")
+          if (otherFile.exists()) {
+            val other = kryoThreadLocal.get().readObject(
+              mgr(new Input(new FileInputStream(otherFile))), classOf[SerializedRangeVector])
+            if (otherSide.key.labelValues == other.key.labelValues) {
+              val stitchedRv =
+                SerializedRangeVector.apply(
+                  StitchRvsExec.stitch(otherSide, other, outputRvRange), otherSide.schema.columns)
+              writeRvToFile(otherFile, stitchedRv, mgr)
+            }
+            else
+              throw new BadQueryException(s"Non-unique result vectors " +
+                s"${other.key.labelValues} and ${otherSide.key.labelValues} " +
+                s"found for $key . Use grouping to create unique matching")
+          } else {
+            writeRvToFile(new File(dir, s"one_$keyHash"), oneSide, mgr)
+            writeRvToFile(otherFile, otherSide, mgr)
+            val keyFile = new File(dir, s"pairKey_$keyHash")
+            kryoThreadLocal.get().writeObject(mgr(new Output(new FileOutputStream(keyFile))), key.labelValues)
+            pairs += 1
+          }
+      }
+
+    override def numPairs(): Int = pairs
+
+    override def iteratePairs: Iterator[(RangeVectorKey, RangeVector, RangeVector)] =
+      dir.listFiles((_, name) => name.startsWith("pairKey_"))
+        .toIterator.map(keyFile => {
+              Using.Manager {
+                mgr =>
+                  val keyHash = keyFile.toString
+                    .substring(keyFile.toString.lastIndexOf(File.separator)).substring("pairKey_".size + 1)
+                  val oneRv = kryoThreadLocal.get().readObject(mgr(new Input(
+                    new FileInputStream(new File(dir, s"one_$keyHash")))),
+                                classOf[SerializedRangeVector])
+                  val otherRv = kryoThreadLocal.get().readObject(mgr(new Input(
+                    new FileInputStream(new File(dir, s"other_$keyHash")))), classOf[SerializedRangeVector])
+
+                  val keyFileIn = new FileInputStream(keyFile)
+                  val keys = kryoThreadLocal.get().readObject(mgr(new Input(keyFileIn)),
+                    classOf[Map[Utf8Str, Utf8Str]])
+                  (CustomRangeVectorKey(keys), oneRv, otherRv)
+              }.get
+          }
+      )
 
     override def cleanup(): Unit = {
+      // TODO: Implement
+      println(s"TODO, Clean up ${dir.toString}")
+    }
+
+    override def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector] = {
+      Using.Manager {
+        mgr =>
+          val keyHash = joinKeysHash(resKey.labelValues)
+          val otherSideFile = new File(dir, s"other_$keyHash")
+          if (otherSideFile.exists()) {
+              Some(
+                kryoThreadLocal.get().readObject(mgr(new Input(new FileInputStream(otherSideFile))),
+                  classOf[SerializedRangeVector]))
+          } else {
+            None
+          }
+      }.get
 
     }
-//      Files.walk(dir.toPath)
-//        .map(_.toFile).forEach(_.delete)
 
-    override def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector] = ???
+    override def manySideIterator: Iterator[SerializedRangeVector] =
+        dir.listFiles((_, name) => name.startsWith("many_")).iterator.map( file =>
+          Using.Manager {
+            mgr =>
+              kryoThreadLocal.get().readObject(
+                mgr(new Input(new FileInputStream(file))), classOf[SerializedRangeVector])
+          }.get)
 
-    override def manySideIterator: Iterator[RangeVector] = ???
   }
 
-  class InMemoryIntermediateJoinOperationStore extends IntermediateJoinOperationStore {
-
-    val oneSideMap = new mutable.HashMap[Map[Utf8Str, Utf8Str], RangeVector]()
-    val pairs = new mutable.HashMap[RangeVectorKey, (RangeVector, RangeVector)]
-
-    val manySide = new mutable.ArrayBuffer[RangeVector]
-
-    override def numOneSideEntries: Int = oneSideMap.size
-
-    override def addOneSide(rv: RangeVector, responseSeq: Int): Unit = {
-      val jk = joinKeys(rv.key)
-      // When spread changes, we need to account for multiple Range Vectors with same key coming from different shards
-      // Each of these range vectors would contain data for different time ranges
-      if (oneSideMap.contains(jk)) {
-        val rvDupe = oneSideMap(jk)
-        if (rv.key.labelValues == rvDupe.key.labelValues) {
-          oneSideMap.put(jk, StitchRvsExec.stitch(rv, rvDupe, outputRvRange))
-        } else {
-          this.cleanup()
-          throw new BadQueryException(s"Cardinality $cardinality was used, but many found instead of one for $jk. " +
-            s"${rvDupe.key.labelValues} and ${rv.key.labelValues} were the violating keys on many side")
-        }
-      } else {
-        oneSideMap.put(jk, rv)
-      }
-    }
-
-    override def addManySide(rv: RangeVector, responseSeq: Int): Unit = manySide.append(rv)
-
-    override def numManySideEntries: Int = manySide.size
-
-    def cleanup(): Unit = {
-
-    }
-
-    def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector] = pairs.get(resKey).map(_._2)
-
-
-    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[RangeVector] = oneSideMap.get(joinKey)
-
-    /**
-     * Saves the key along with oneSide and the other side
-     *
-     * @param key       the rangevector key of the pair
-     * @param oneSide   the oneside of the pair
-     * @param otherSide otherSide, which can be Many and we may need to stitch them
-     */
-    override def addPair(key: RangeVectorKey, oneSide: RangeVector, otherSide: RangeVector): Unit =
-      pairs.update(key, pairs.get(key) match {
-        case Some((_, other))  =>
-          if (otherSide.key.labelValues == other.key.labelValues)
-            (oneSide, StitchRvsExec.stitch(otherSide, other, outputRvRange))
-            else
-            throw new BadQueryException(s"Non-unique result vectors " +
-              s"${other.key.labelValues} and ${otherSide.key.labelValues} " +
-              s"found for $key . Use grouping to create unique matching")
-        case None              => (oneSide, otherSide)
-      })
-
-
-    /**
-     * Gets the number of pairs added to the store
-     *
-     * @return the count of the number of pairs added
-     */
-    override def numPairs(): Int = pairs.size
-
-    /**
-     *
-     * @return Iterable of all the pairs added. The Iterable is a three tuple of key, one side and other side of join
-     */
-    override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] =
-      pairs.iterator.map{ case(key, (one, other)) =>  (key, one, other)}.toIterable
-
-    /**
-     * Gets the Iterator to the many side
-     *
-     * @return Iterator to many side
-     */
-    override def manySideIterator: Iterator[RangeVector] = manySide.iterator
-  }
+//  class InMemoryIntermediateJoinOperationStore extends IntermediateJoinOperationStore {
+//
+//    val oneSideMap = new mutable.HashMap[Map[Utf8Str, Utf8Str], SerializedRangeVector]()
+//    val pairs = new mutable.HashMap[RangeVectorKey, (SerializedRangeVector, SerializedRangeVector)]
+//
+//    val manySide = new mutable.ArrayBuffer[RangeVector]
+//
+//    override def numOneSideEntries: Int = oneSideMap.size
+//
+//    override def addOneSide(rv: SerializedRangeVector, responseSeq: Int): Unit = {
+//      val jk = joinKeys(rv.key)
+//      // When spread changes, we need to account for multiple Range Vectors with same key coming from different shards
+//      // Each of these range vectors would contain data for different time ranges
+//      if (oneSideMap.contains(jk)) {
+//        val rvDupe = oneSideMap(jk)
+//        if (rv.key.labelValues == rvDupe.key.labelValues) {
+//          oneSideMap.put(jk,
+//            StitchRvsExec.stitch(rv, rvDupe, outputRvRange))
+//        } else {
+//          this.cleanup()
+//          throw new BadQueryException(s"Cardinality $cardinality was used, but many found instead of one for $jk. " +
+//            s"${rvDupe.key.labelValues} and ${rv.key.labelValues} were the violating keys on many side")
+//        }
+//      } else {
+//        oneSideMap.put(jk, rv)
+//      }
+//    }
+//
+//    override def addManySide(rv: RangeVector, responseSeq: Int): Unit = manySide.append(rv)
+//
+//    override def numManySideEntries: Int = manySide.size
+//
+//    def cleanup(): Unit = {
+//
+//    }
+//
+//    def getOtherByResKey(resKey: RangeVectorKey): Option[RangeVector] = pairs.get(resKey).map(_._2)
+//
+//
+//    override def oneSideByJoinKey(joinKey: Map[Utf8Str, Utf8Str]): Option[SerializedRangeVector]
+//        = oneSideMap.get(joinKey)
+//
+//    /**
+//     * Saves the key along with oneSide and the other side
+//     *
+//     * @param key       the rangevector key of the pair
+//     * @param oneSide   the oneside of the pair
+//     * @param otherSide otherSide, which can be Many and we may need to stitch them
+//     */
+//    override def addPair(key: RangeVectorKey, oneSide: SerializedRangeVector, otherSide: SerializedRangeVector)
+//    : Unit =
+//      pairs.update(key, pairs.get(key) match {
+//        case Some((_, other))  =>
+//          if (otherSide.key.labelValues == other.key.labelValues)
+//            (oneSide, StitchRvsExec.stitch(otherSide, other, outputRvRange))
+//            else
+//            throw new BadQueryException(s"Non-unique result vectors " +
+//              s"${other.key.labelValues} and ${otherSide.key.labelValues} " +
+//              s"found for $key . Use grouping to create unique matching")
+//        case None              => (oneSide, otherSide)
+//      })
+//
+//
+//    /**
+//     * Gets the number of pairs added to the store
+//     *
+//     * @return the count of the number of pairs added
+//     */
+//    override def numPairs(): Int = pairs.size
+//
+//    /**
+//     *
+//     * @return Iterable of all the pairs added. The Iterable is a three tuple of key, one side and other side of join
+//     */
+//    override def iteratePairs: Iterable[(RangeVectorKey, RangeVector, RangeVector)] =
+//      pairs.iterator.map{ case(key, (one, other)) =>  (key, one, other)}.toIterable
+//
+//    /**
+//     * Gets the Iterator to the many side
+//     *
+//     * @return Iterator to many side
+//     */
+//    override def manySideIterator: Iterator[RangeVector] = manySide.iterator
+//  }
   //scalastyle:off method.length
   private[exec] def memoryEfficientCompose(childResponses: Observable[(QueryResult, Int)],
                                    firstSchema: Task[ResultSchema],
@@ -349,15 +455,15 @@ final case class BinaryJoinExec(queryContext: QueryContext,
                   // LHS is the one side and RHS is the many side
                   // TODO: What about OneToOne?
                   if (i < numLhsExec)
-                    qr.result.foreach(store.addOneSide(_, i))
+                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
                   else
-                    qr.result.foreach(store.addManySide(_, i))
+                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
                 } else {
                   // LHS becomes the many side and RHS is the one side
                   if (i < numLhsExec)
-                    qr.result.foreach(store.addManySide(_, i))
+                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addManySide(_, i))
                   else
-                    qr.result.foreach(store.addOneSide(_, i))
+                    qr.result.map(_.asInstanceOf[SerializedRangeVector]).foreach(store.addOneSide(_, i))
                 }
                 store
             }.flatMap(store => {
@@ -378,11 +484,13 @@ final case class BinaryJoinExec(queryContext: QueryContext,
             case None =>
           }
         })
-      Observable.fromIterable(store.iteratePairs.map{
-        case (key, one, other) =>
-          val res = if (cardinality == Cardinality.OneToMany) binOp(one.rows, other.rows)
-          else binOp(other.rows, one.rows)
-          IteratorBackedRangeVector(key, res, outputRvRange)
+      Observable.fromIterator(Task.eval {
+        store.iteratePairs.map {
+          case (key, one, other) =>
+            val res = if (cardinality == Cardinality.OneToMany) binOp(one.rows, other.rows)
+            else binOp(other.rows, one.rows)
+            IteratorBackedRangeVector(key, res, outputRvRange)
+        }
       })
     }).guarantee(Task.eval{store.cleanup()})
   }

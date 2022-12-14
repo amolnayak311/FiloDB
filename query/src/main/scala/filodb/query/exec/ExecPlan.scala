@@ -4,6 +4,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{PartitionRangeVectorKeySerializer, ZeroCopyUTF8StringSerializer}
 import com.twitter.chill.ScalaKryoInstantiator
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
@@ -11,13 +12,13 @@ import monix.eval.Task
 import monix.execution.Scheduler
 import monix.reactive.{Observable, Pipe}
 
-import filodb.core.DatasetRef
+import filodb.core.{DatasetRef, RecordSchema2Serializer}
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.memstore.{FiloSchedulers, SchemaMismatch}
 import filodb.core.memstore.FiloSchedulers.QuerySchedName
 import filodb.core.query._
 import filodb.core.store.ChunkSource
-import filodb.memory.format.RowReader
+import filodb.memory.format.{RowReader, ZeroCopyUTF8String}
 import filodb.query._
 import filodb.query.Query.qLogger
 
@@ -76,11 +77,15 @@ trait ExecPlan extends QueryCommand {
     */
   def dispatcher: PlanDispatcher
 
+
   val kryoThreadLocal = new ThreadLocal[Kryo]() {
     override def initialValue(): Kryo = {
       val instantiator = new ScalaKryoInstantiator
       val k = instantiator.newKryo()
       k.register(classOf[SerializedRangeVector])
+      k.addDefaultSerializer(classOf[RecordSchema], classOf[RecordSchema2Serializer])
+      k.register(classOf[PartitionRangeVectorKey], new PartitionRangeVectorKeySerializer)
+      k.addDefaultSerializer(classOf[ZeroCopyUTF8String], classOf[ZeroCopyUTF8StringSerializer])
       k
     }
   }
