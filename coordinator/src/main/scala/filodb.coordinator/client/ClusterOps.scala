@@ -2,8 +2,8 @@ package filodb.coordinator.client
 
 import scala.concurrent.duration._
 
-import akka.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.ActorRef
 
 import filodb.coordinator._
 import filodb.core._

@@ -1,6 +1,6 @@
 package filodb.coordinator
 
-import akka.actor.ActorRef
+import org.apache.pekko.actor.ActorRef
 
 class FilodbClusterSpec extends AkkaSpec {
   "FilodbCluster" must {

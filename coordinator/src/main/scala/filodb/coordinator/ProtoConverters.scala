@@ -1,11 +1,13 @@
 package filodb.coordinator
 
-import akka.serialization.SerializationExtension
-import com.google.protobuf.ByteString
-import com.typesafe.config.ConfigFactory
 import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
+
+import com.google.protobuf.ByteString
+import com.typesafe.config.ConfigFactory
+import org.apache.pekko.serialization.SerializationExtension
 
 import filodb.core.downsample.{CounterDownsamplePeriodMarker, TimeDownsamplePeriodMarker}
 import filodb.core.memstore.PartLookupResult
@@ -1325,7 +1327,7 @@ object ProtoConverters {
     def toProto(): GrpcMultiPartitionQueryService.ActorPlanDispatcher = {
       val builder = GrpcMultiPartitionQueryService.ActorPlanDispatcher.newBuilder()
       builder.setPlanDispatcher(apd.asInstanceOf[filodb.query.exec.PlanDispatcher].toProto)
-      builder.setActorPath(akka.serialization.Serialization.serializedActorPath(apd.target))
+      builder.setActorPath(org.apache.pekko.serialization.Serialization.serializedActorPath(apd.target))
       builder.build()
     }
   }

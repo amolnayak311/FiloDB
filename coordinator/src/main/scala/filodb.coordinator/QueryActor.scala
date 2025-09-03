@@ -5,8 +5,6 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import akka.actor.{ActorRef, Props}
-import akka.pattern.AskTimeoutException
 import kamon.Kamon
 import kamon.tag.TagSet
 import monix.catnap.CircuitBreaker
@@ -14,6 +12,8 @@ import monix.eval.Task
 import monix.execution.exceptions.ExecutionRejectedException
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
+import org.apache.pekko.actor.{ActorRef, Props}
+import org.apache.pekko.pattern.AskTimeoutException
 
 import filodb.coordinator.queryplanner.SingleClusterPlanner
 import filodb.core._

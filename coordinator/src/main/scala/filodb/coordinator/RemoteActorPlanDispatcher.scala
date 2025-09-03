@@ -3,6 +3,7 @@ package filodb.coordinator
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.reactive.Observable
+import org.apache.pekko.serialization.SerializationExtension
 
 import filodb.core.store.ChunkSource
 import filodb.query.{QueryResponse, StreamQueryResponse}
@@ -18,7 +19,7 @@ case class RemoteActorPlanDispatcher(path: String, clusterName: String) extends 
   override def dispatch(
      plan: ExecPlanWithClientParams, source: ChunkSource
   )(implicit sched: Scheduler): Task[QueryResponse] = {
-    val serialization = akka.serialization.SerializationExtension(ActorSystemHolder.system)
+    val serialization = SerializationExtension(ActorSystemHolder.system)
     val deserializedActorRef = serialization.system.provider.resolveActorRef(path)
     val dispatcher = ActorPlanDispatcher(
       deserializedActorRef, clusterName

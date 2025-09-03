@@ -1,11 +1,14 @@
 package filodb.http
 
-import akka.actor.ActorSystem
-import akka.http.scaladsl.model.{ContentTypes, StatusCodes}
-import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.testkit.TestProbe
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import org.apache.pekko.http.scaladsl.model.headers.RawHeader
+import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
+import org.apache.pekko.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
+import org.apache.pekko.testkit.TestProbe
+import io.circe.{Decoder, Encoder, Printer}
+import io.circe.parser.decode
 
 import filodb.coordinator._
 import filodb.core.{AsyncTest, GdeltTestData, TestData}
@@ -15,7 +18,22 @@ import org.scalatest.funspec.AnyFunSpec
 object ClusterApiRouteSpec extends ActorSpecConfig
 
 class ClusterApiRouteSpec extends AnyFunSpec with ScalatestRouteTest with AsyncTest {
-  import FailFastCirceSupport._
+  // Circe support for Pekko HTTP
+  implicit def circeJsonMarshaller[A](implicit encoder: Encoder[A],
+                                      printer: Printer = Printer.noSpaces): ToEntityMarshaller[A] =
+    Marshaller.withFixedContentType(ContentTypes.`application/json`) { obj =>
+      HttpEntity(ContentTypes.`application/json`, printer.pretty(encoder(obj)))
+    }
+
+  implicit def circeJsonUnmarshaller[A](implicit decoder: Decoder[A]): FromEntityUnmarshaller[A] =
+    Unmarshaller.byteStringUnmarshaller
+      .forContentTypes(ContentTypes.`application/json`)
+      .mapWithCharset { (data, charset) =>
+        val input = if (charset.nioCharset == java.nio.charset.StandardCharsets.UTF_8) data.utf8String
+                   else data.decodeString(charset.nioCharset.name)
+        decode[A](input).fold(throw _, identity)
+      }
+
   import io.circe.generic.auto._
 
   import GdeltTestData.dataset6

@@ -21,7 +21,7 @@ object IngestionStreamSpec extends ActorSpecConfig
 class IngestionStreamSpec extends ActorTest(IngestionStreamSpec.getNewSystem) with StrictLogging
   with ScalaFutures with BeforeAndAfterEach {
 
-  import akka.testkit._
+  import org.apache.pekko.testkit._
 
   import client.IngestionCommands._
   import NodeClusterActor._

@@ -1,7 +1,7 @@
 package filodb.http
 
-import akka.http.scaladsl.server.Directives._
 import ch.qos.logback.classic.{Level, Logger}
+import org.apache.pekko.http.scaladsl.server.Directives._
 import org.slf4j.LoggerFactory
 
 object AdminRoutes extends FiloRoute {

@@ -2,9 +2,9 @@ package filodb.coordinator
 
 import java.net.InetAddress
 import scala.concurrent.duration._
-import akka.actor.{Actor, ActorRef, AddressFromURIString, PoisonPill, Props}
-import akka.pattern.gracefulStop
-import akka.util.Timeout
+import org.apache.pekko.actor.{Actor, ActorRef, AddressFromURIString, PoisonPill, Props}
+import org.apache.pekko.pattern.gracefulStop
+import org.apache.pekko.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.ScalaFutures
@@ -24,7 +24,7 @@ object NodeCoordinatorActorSpec extends ActorSpecConfig
 class NodeCoordinatorActorSpec extends ActorTest(NodeCoordinatorActorSpec.getNewSystem)
   with ScalaFutures with BeforeAndAfterEach {
 
-  import akka.testkit._
+  import org.apache.pekko.testkit._
 
   import client.DatasetCommands._
   import client.IngestionCommands._

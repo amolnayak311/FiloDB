@@ -3,10 +3,10 @@ package filodb.coordinator.v2
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
-import akka.actor.{ActorRef, OneForOneStrategy, Props}
-import akka.actor.SupervisorStrategy.Resume
-import akka.event.LoggingReceive
 import kamon.Kamon
+import org.apache.pekko.actor.{ActorRef, OneForOneStrategy, Props}
+import org.apache.pekko.actor.SupervisorStrategy.Resume
+import org.apache.pekko.event.LoggingReceive
 
 import filodb.coordinator._
 import filodb.coordinator.v2.NewNodeCoordinatorActor.InitNewNodeCoordinatorActor

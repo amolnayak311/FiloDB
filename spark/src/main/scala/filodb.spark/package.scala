@@ -5,7 +5,7 @@ import java.sql.Timestamp
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-import akka.actor.ActorRef
+import org.apache.pekko.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import net.ceedubs.ficus.Ficus._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}

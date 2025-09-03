@@ -6,12 +6,12 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
-import akka.actor.{ActorRef, OneForOneStrategy, PoisonPill, Props, Terminated}
-import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.event.LoggingReceive
 import com.typesafe.config.ConfigFactory
 import kamon.Kamon
 import net.ceedubs.ficus.Ficus._
+import org.apache.pekko.actor.{ActorRef, OneForOneStrategy, PoisonPill, Props, Terminated}
+import org.apache.pekko.actor.SupervisorStrategy.{Restart, Stop}
+import org.apache.pekko.event.LoggingReceive
 
 import filodb.coordinator.client.MiscCommands
 import filodb.core._

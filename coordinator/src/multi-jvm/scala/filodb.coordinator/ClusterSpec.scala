@@ -1,7 +1,7 @@
 package filodb.coordinator
 
-import akka.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
-import akka.testkit.ImplicitSender
+import org.apache.pekko.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
+import org.apache.pekko.testkit.ImplicitSender
 import com.typesafe.scalalogging.StrictLogging
 import filodb.core.AsyncTest
 import org.scalatest.funspec.AnyFunSpecLike

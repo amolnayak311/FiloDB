@@ -2,8 +2,11 @@ package filodb.coordinator
 
 import scala.collection.mutable.{HashMap => MutableHashMap, Map => MMap}
 
-import akka.actor._
-import akka.cluster.singleton._
+import org.apache.pekko.actor._
+import org.apache.pekko.cluster.singleton.ClusterSingletonManager
+import org.apache.pekko.cluster.singleton.ClusterSingletonManagerSettings
+import org.apache.pekko.cluster.singleton.ClusterSingletonProxy
+import org.apache.pekko.cluster.singleton.ClusterSingletonProxySettings
 
 import filodb.core.DatasetRef
 import filodb.core.memstore.TimeSeriesStore

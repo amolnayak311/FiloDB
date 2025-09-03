@@ -1,7 +1,7 @@
 package filodb.coordinator
 
-import akka.actor.ActorSystem
 import com.typesafe.config.Config
+import org.apache.pekko.actor.ActorSystem
 
 /**
  * Provides singleton access to the actor system.

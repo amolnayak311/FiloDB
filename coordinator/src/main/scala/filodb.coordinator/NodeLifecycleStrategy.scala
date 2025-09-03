@@ -1,9 +1,9 @@
 package filodb.coordinator
 
-import akka.actor.{Actor, DeadLetter}
-import akka.cluster.{Cluster, MemberStatus}
-import akka.cluster.ClusterEvent._
-import akka.event.LoggingReceive
+import org.apache.pekko.actor.{Actor, DeadLetter}
+import org.apache.pekko.cluster.{Cluster, MemberStatus}
+import org.apache.pekko.cluster.ClusterEvent._
+import org.apache.pekko.event.LoggingReceive
 
 /** TODO handle when singleton is in handover. */
 private[coordinator] final class NodeLifecycleStrategy(settings: FilodbSettings) extends BaseActor {

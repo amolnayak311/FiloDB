@@ -5,12 +5,12 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-import akka.actor.ActorSystem
 import ch.qos.logback.classic.{Level, Logger}
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import com.typesafe.scalalogging.StrictLogging
 import monix.eval.Task
 import monix.reactive.Observable
+import org.apache.pekko.actor.ActorSystem
 import org.openjdk.jmh.annotations._
 
 import filodb.coordinator.queryplanner.SingleClusterPlanner

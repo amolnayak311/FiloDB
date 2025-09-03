@@ -1,6 +1,6 @@
 package filodb.http
 
-import akka.actor.ActorRef
+import org.apache.pekko.actor.ActorRef
 import com.typesafe.config.ConfigFactory
 import filodb.coordinator._
 import filodb.coordinator.v2.DatasetShardHealth

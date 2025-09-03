@@ -1,7 +1,7 @@
 package filodb.coordinator
 
-import akka.actor.{Actor, ActorRef}
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.{Actor, ActorRef}
 
 import filodb.core.DatasetRef
 
@@ -36,8 +36,8 @@ trait BaseActor extends Actor with StrictLogging {
 
 }
 
-/** Leverages the [[akka.actor.ActorContext.children]] dataset structure
-  * managed by Akka for an actor creating other actors. Uses a naming
+/** Leverages the [[org.apache.pekko.actor.ActorContext.children]] dataset structure
+  * managed by Pekko for an actor creating other actors. Uses a naming
   * convention allowing avoidance of an additional dataset holding
   * created actors.
   */

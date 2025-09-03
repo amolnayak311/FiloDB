@@ -1,11 +1,11 @@
 package filodb.standalone
 
-import akka.actor.ActorRef
-import akka.cluster.Cluster
-import com.typesafe.scalalogging.StrictLogging
 import scala.concurrent.duration._
 
-import filodb.akkabootstrapper.AkkaBootstrapper
+import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.cluster.Cluster
+
 import filodb.coordinator._
 import filodb.coordinator.client.LocalClient
 import filodb.coordinator.queryplanner.SingleClusterPlanner
@@ -13,18 +13,20 @@ import filodb.core.{DatasetRef, GlobalConfig, GlobalScheduler}
 import filodb.core.metadata.{Dataset, Schemas}
 import filodb.core.query.QueryConfig
 import filodb.http.{FiloHttpServer, PromQLGrpcServer}
+import filodb.pekkobootstrap.PekkoBootstrapper
+
 
 /**
- * FiloServer starts a "standalone" FiloDB server which can ingest and support queries through the Akka
+ * FiloServer starts a "standalone" FiloDB server which can ingest and support queries through the Pekko
  * API.  It is meant to be used in a cluster.
  *
- * - The servers connect to each other setting up an Akka Cluster.  Seed nodes must be configured.
+ * - The servers connect to each other setting up a Pekko Cluster.  Seed nodes must be configured.
  * - Ingestion must be started using the CLI and the source configured.  When it starts it does nothing
  *   at the beginning.
  *
  * ## Configuration ##
  * {{{
- *   seed-nodes = ["akka.tcp://filo-standalone@hostname_or_ip:2552"]
+ *   seed-nodes = ["pekko://filo-standalone@hostname_or_ip:2552"]
  *   dataset-definitions {
  *     sample-timeseries {
  *       partition-columns = ["metricName:string", "tags:map"]
@@ -55,8 +57,8 @@ class FiloServer(watcher: Option[ActorRef]) extends FilodbClusterNode {
   // convenience for users to get up and running quickly without setting up cassandra.
   val client = new LocalClient(coordinatorActor)
 
-  def bootstrap(akkaCluster: Cluster): AkkaBootstrapper = {
-    val bootstrapper = AkkaBootstrapper(akkaCluster)
+  def bootstrap(pekkoCluster: Cluster): PekkoBootstrapper = {
+    val bootstrapper = PekkoBootstrapper(pekkoCluster)
     bootstrapper.bootstrap()
     bootstrapper
   }
@@ -67,7 +69,7 @@ class FiloServer(watcher: Option[ActorRef]) extends FilodbClusterNode {
     val bootstrapper = bootstrap(cluster.cluster)
     val singleton = cluster.clusterSingleton(role, watcher)
     filoHttpServer = new FiloHttpServer(cluster.system, cluster.settings)
-    filoHttpServer.start(coordinatorActor, singleton, false, bootstrapper.getAkkaHttpRoute())
+    filoHttpServer.start(coordinatorActor, singleton, false, bootstrapper.getPekkoHttpRoute())
     if (config.getBoolean("grpc.start-grpc-service")) {
       // TODO: Remove hardcoding
       val dsRef = DatasetRef("prometheus")
@@ -78,7 +80,7 @@ class FiloServer(watcher: Option[ActorRef]) extends FilodbClusterNode {
           val dataset = new Dataset(dsRef.dataset, Schemas.promCounter)
           val planner = new SingleClusterPlanner(dataset, Schemas.global,
             shardMapper,
-            earliestRetainedTimestampFn = 0, queryConfig, "raw")
+            0, queryConfig, "raw")
           promQLGrpcServer = new PromQLGrpcServer(_ => planner,
             cluster.settings, GlobalScheduler.globalImplicitScheduler)
           promQLGrpcServer.start()

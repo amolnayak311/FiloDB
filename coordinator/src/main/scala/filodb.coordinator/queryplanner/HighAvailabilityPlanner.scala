@@ -410,7 +410,7 @@ class HighAvailabilityPlanner(dsRef: DatasetRef,
         false
       }
       val actorRef = shardMapper.coordForShard(i)
-      val path = if (actorRef == akka.actor.ActorRef.noSender) {
+      val path = if (actorRef == org.apache.pekko.actor.ActorRef.noSender) {
         ""
       } else {
         actorRef.path.toString

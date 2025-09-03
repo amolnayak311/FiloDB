@@ -1,6 +1,6 @@
 package filodb.coordinator
 
-import akka.testkit.TestProbe
+import org.apache.pekko.testkit.TestProbe
 
 import filodb.core.DatasetRef
 

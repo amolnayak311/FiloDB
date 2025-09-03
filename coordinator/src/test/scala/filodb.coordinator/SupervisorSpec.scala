@@ -1,7 +1,7 @@
 package filodb.coordinator
 
-import akka.actor.{ActorPath, PoisonPill}
-import akka.cluster.Cluster
+import org.apache.pekko.actor.{ActorPath, PoisonPill}
+import org.apache.pekko.cluster.Cluster
 import monix.execution.Scheduler
 
 import filodb.core.store.MetaStore

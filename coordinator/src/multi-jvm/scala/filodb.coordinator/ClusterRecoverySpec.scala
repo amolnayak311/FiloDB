@@ -2,10 +2,10 @@ package filodb.coordinator
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import akka.actor.ActorRef
-import akka.pattern.ask
-import akka.remote.testkit.MultiNodeConfig
-import akka.util.Timeout
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.remote.testkit.MultiNodeConfig
+import org.apache.pekko.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.time.{Millis, Seconds, Span}
 import filodb.core._
@@ -68,7 +68,7 @@ object ClusterRecoverySpecConfig extends MultiNodeConfig {
  * NOTE: since we moved to static configs every startup is a "recovery".
  */
 abstract class ClusterRecoverySpec extends ClusterSpec(ClusterRecoverySpecConfig) {
-  import akka.testkit._
+  import org.apache.pekko.testkit._
 
   import ClusterRecoverySpecConfig._
   import filodb.query._

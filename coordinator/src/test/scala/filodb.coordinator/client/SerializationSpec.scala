@@ -1,8 +1,8 @@
 package filodb.coordinator.client
 
-import akka.actor.ActorRef
-import akka.serialization.SerializationExtension
-import akka.testkit.TestProbe
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.serialization.SerializationExtension
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.ScalaFutures
 import filodb.coordinator.{ActorSpecConfig, ActorSystemHolder, ActorTest, ShardMapper}
@@ -29,9 +29,9 @@ import filodb.query.exec.PartKeysExec
 
 object SerializationSpecConfig extends ActorSpecConfig {
   override val defaultConfig = """
-                      |akka.loggers = ["akka.testkit.TestEventListener"]
-                      |akka.actor.serialize-messages = on
-                      |akka.actor.kryo.buffer-size = 2048
+                      |pekko.loggers = ["org.apache.pekko.testkit.TestEventListener"]
+                      |pekko.actor.serialize-messages = on
+                      |pekko.actor.kryo.buffer-size = 2048
                       """.stripMargin
 }
 

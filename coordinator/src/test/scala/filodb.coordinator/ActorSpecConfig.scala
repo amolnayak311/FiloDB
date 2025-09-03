@@ -2,8 +2,8 @@ package filodb.coordinator
 
 import java.net.InetAddress
 
-import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestKit}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.testkit.{ImplicitSender, TestKit}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest._
 import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
@@ -24,16 +24,16 @@ object ActorSpecConfig {
 
 trait ActorSpecConfig {
   val defaultConfig = """
-                      |akka.debug.receive = on
-                      |akka.log-dead-letters = 0
-                      |akka.log-dead-letters-during-shutdown = off
-                      |akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
-                      |akka.loggers = ["akka.testkit.TestEventListener"]
-                      |akka.debug.unhandled = on
+                      |pekko.debug.receive = on
+                      |pekko.log-dead-letters = 0
+                      |pekko.log-dead-letters-during-shutdown = off
+                      |pekko.actor.provider = "org.apache.pekko.cluster.ClusterActorRefProvider"
+                      |pekko.loggers = ["org.apache.pekko.testkit.TestEventListener"]
+                      |pekko.debug.unhandled = on
                       """.stripMargin
   // Making this lazy is needed for overrides to work successfully
   lazy val configString = defaultConfig
-  // Allow Java system properties to set config options like akka.test.timefactor
+  // Allow Java system properties to set config options like pekko.test.timefactor
   lazy val config = ConfigFactory.parseString(configString)
     .withFallback(ConfigFactory.parseResources("application_test.conf"))
     .withFallback(ConfigFactory.load("filodb-defaults.conf"))

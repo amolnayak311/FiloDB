@@ -2,8 +2,8 @@ package filodb.standalone
 
 import scala.concurrent.duration._
 
-import akka.actor.ActorRef
-import akka.remote.testkit.MultiNodeConfig
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.remote.testkit.MultiNodeConfig
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}

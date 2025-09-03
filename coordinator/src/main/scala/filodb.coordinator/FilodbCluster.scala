@@ -6,15 +6,15 @@ import scala.collection.immutable
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-import akka.Done
-import akka.actor._
-import akka.cluster._
-import akka.cluster.ClusterEvent._
-import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
 import monix.execution.{Scheduler, UncaughtExceptionReporter}
+import org.apache.pekko.Done
+import org.apache.pekko.actor._
+import org.apache.pekko.cluster._
+import org.apache.pekko.cluster.ClusterEvent._
+import org.apache.pekko.util.Timeout
 
 import filodb.core.GlobalScheduler
 import filodb.core.memstore.FiloSchedulers
@@ -41,7 +41,7 @@ final class FilodbCluster(val system: ExtendedActorSystem, overrideConfig: Confi
 
   import ActorName.{NodeGuardianName => guardianName}
   import NodeProtocol._
-  import akka.pattern.ask
+  import org.apache.pekko.pattern.ask
 
   val settings = FilodbSettings.initialize(ConfigFactory.load(overrideConfig).withFallback(system.settings.config))
   import settings._
@@ -259,10 +259,10 @@ private[filodb] trait FilodbClusterNode extends KamonInit with NodeConfiguration
     val allConfig = roleConfig.withFallback(role match {
       // For CLI: leave off Cluster extension as cluster is not needed.  Turn off normal shutdown for quicker exit.
       case ClusterRole.Cli => ConfigFactory.parseString(
-        """# akka.actor.provider=akka.remote.RemoteActorRefProvider
-          |akka.coordinated-shutdown.run-by-jvm-shutdown-hook=off
+        """# pekko.actor.provider=org.apache.pekko.remote.RemoteActorRefProvider
+          |pekko.coordinated-shutdown.run-by-jvm-shutdown-hook=off
         """.stripMargin)
-      case _ => ConfigFactory.parseString(s"""akka.cluster.roles=["${role.roleName}"]""")
+      case _ => ConfigFactory.parseString(s"""pekko.cluster.roles=["${role.roleName}"]""")
     }).withFallback(systemConfig)
 
     ActorSystemHolder.createActorSystem(role.systemName, allConfig)

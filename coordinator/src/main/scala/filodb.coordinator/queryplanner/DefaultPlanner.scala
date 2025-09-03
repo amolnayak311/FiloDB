@@ -3,8 +3,8 @@ package filodb.coordinator.queryplanner
 
 import java.util.concurrent.ThreadLocalRandom
 
-import akka.serialization.SerializationExtension
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.serialization.SerializationExtension
 
 import filodb.coordinator.{ActorPlanDispatcher, ActorSystemHolder, GrpcPlanDispatcher, RemoteActorPlanDispatcher}
 import filodb.core.metadata.{Dataset, DatasetOptions, Schemas}

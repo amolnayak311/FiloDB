@@ -1,6 +1,6 @@
 package filodb.coordinator
 
-import akka.actor.Props
+import org.apache.pekko.actor.Props
 import com.typesafe.config.ConfigFactory
 import filodb.core.{DatasetRef, GdeltTestData, TestData}
 import filodb.core.metadata.{Dataset, DatasetOptions}
@@ -19,7 +19,7 @@ class ProtoConvertersSpec extends AnyFunSpec with Matchers {
 
   val qContext = QueryContext()
   val now = System.currentTimeMillis()
-  val timeout = akka.util.Timeout(10L, TimeUnit.SECONDS);
+  val timeout = org.apache.pekko.util.Timeout(10L, TimeUnit.SECONDS);
   val filters = Seq(ColumnFilter("_ws_", filodb.core.query.Filter.Equals("demo")),
     ColumnFilter("_ns_", filodb.core.query.Filter.Equals("App-0")),
     ColumnFilter("_metric_", filodb.core.query.Filter.Equals("http_req_total")),
@@ -94,7 +94,7 @@ class ProtoConvertersSpec extends AnyFunSpec with Matchers {
       Props(new DummyActor)
   }
 
-  class DummyActor extends akka.actor.Actor {
+  class DummyActor extends org.apache.pekko.actor.Actor {
     override def receive: Receive = {
       case "" => Unit
     }

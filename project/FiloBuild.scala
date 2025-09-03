@@ -66,10 +66,7 @@ object Submodules {
       multiJvmSettings,
       testMultiJvmToo,
       name := "filodb-coordinator",
-      libraryDependencies ++= coordDeps,
-      libraryDependencies +=
-      "com.typesafe.akka" %% "akka-contrib" % akkaVersion exclude(
-        "com.typesafe.akka", s"akka-persistence-experimental_${scalaBinaryVersion.value}")
+      libraryDependencies ++= coordDeps
     )
 
   lazy val prometheus = (project in file("prometheus"))
@@ -143,14 +140,7 @@ object Submodules {
       libraryDependencies ++= sparkJobsDeps
     )
 
-  lazy val bootstrapper = (project in file("akka-bootstrapper"))
-    .configs(MultiJvm)
-    .settings(
-      commonSettings,
-      multiJvmMaybeSettings,
-      name := "akka-bootstrapper",
-      libraryDependencies ++= bootstrapperDeps
-    )
+  // Removed bootstrapper module - replaced with Pekko built-in cluster bootstrap
 
   lazy val http = (project in file("http"))
     .dependsOn(core, grpc, coordinator % "compile->compile; test->test")
@@ -162,7 +152,7 @@ object Submodules {
 
   lazy val standalone = (project in file("standalone"))
     .dependsOn(core, prometheus % "test->test", coordinator % "compile->compile; test->test",
-      cassandra, kafka, http, bootstrapper, gateway % Test)
+      cassandra, kafka, http, gateway % Test, pekkoBootstrap)
     .configs(MultiJvm)
     .settings(
       commonSettings,
@@ -224,5 +214,12 @@ object Submodules {
       name := "filodb-gatling",
       libraryDependencies ++= gatlingDeps,
       publish := {}
+    )
+
+  lazy val pekkoBootstrap = (project in file("pekko-bootstrap"))
+    .settings(
+      commonSettings,
+      name := "filodb-pekko-bootstrap",
+      libraryDependencies ++= pekkoBootstrapDeps
     )
 }

@@ -4,13 +4,13 @@ import scala.collection.mutable.{HashMap => MutableHashMap, HashSet => MutableHa
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import akka.actor._
-import akka.cluster.{Cluster, Member, MemberStatus}
-import akka.cluster.ClusterEvent._
-import akka.event.LoggingReceive
-import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import kamon.Kamon
+import org.apache.pekko.actor._
+import org.apache.pekko.cluster.{Cluster, Member, MemberStatus}
+import org.apache.pekko.cluster.ClusterEvent._
+import org.apache.pekko.event.LoggingReceive
+import org.apache.pekko.util.Timeout
 
 import filodb.core._
 import filodb.core.downsample.DownsampleConfig
@@ -355,7 +355,7 @@ private[filodb] class NodeClusterActor(settings: FilodbSettings,
   // handleEventEnvelope() currently acks right away, so there is a chance that this actor dies between receiving
   // a new event and the new snapshot is published.
   private def scheduleSnapshotPublishes() = {
-    pubTask = Some(context.system.scheduler.schedule(1.minute, publishInterval, self, PublishSnapshot))
+    pubTask = Some(context.system.scheduler.scheduleWithFixedDelay(1.minute, publishInterval, self, PublishSnapshot))
   }
 
   def shardMapHandler: Receive = LoggingReceive {

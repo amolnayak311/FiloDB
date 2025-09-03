@@ -60,7 +60,7 @@ case class GrpcPlanDispatcher(endpoint: String, requestTimeoutMs: Long) extends 
   // 3) both streaming and non streaming Scala API calls can use streaming GRPC calls.
   def dispatchExecutionPlan(plan: ExecPlanWithClientParams, remainingTime: Long, sched: Scheduler):
   Task[QueryResponse] = {
-    val t = akka.util.Timeout(FiniteDuration(remainingTime, TimeUnit.MILLISECONDS))
+    val t = org.apache.pekko.util.Timeout(FiniteDuration(remainingTime, TimeUnit.MILLISECONDS))
     // We only dispatch the child of ExecPlan, we expect the type of plan to be dispatched
     // by GrpcPlanDispatcher is GenericRemoteExec
     val genericRemoteExec = plan.execPlan.asInstanceOf[GenericRemoteExec]

@@ -13,12 +13,12 @@ object Dependencies {
   val excludeNetty  = ExclusionRule(organization = "io.netty", name = "netty-handler")
   val excludeXBean = ExclusionRule(organization = "org.apache.xbean", name = "xbean-asm6-shaded")
   val excludegrpc = ExclusionRule(organization = "io.grpc")
-  val excludeAkka = ExclusionRule(organization = "com.typesafe.akka")
+  val excludePekko = ExclusionRule(organization = "org.apache.pekko")
 
 
   /* Versions in various modules versus one area of build */
-  val akkaVersion       = "2.5.22" // akka-http/akka-stream compat. TODO when kamon-akka-remote is akka 2.5.4 compat
-  val akkaHttpVersion   = "10.1.8"
+  val pekkoVersion      = "1.0.3"
+  val pekkoHttpVersion  = "1.0.1"
   val cassDriverVersion = "3.7.1"
   val ficusVersion      = "1.3.4"
   val kamonBundleVersion = "2.7.3"
@@ -33,9 +33,9 @@ object Dependencies {
   val scalaTest         = "org.scalatest"              %% "scalatest"            % "3.1.2"
   val scalaCheck        = "org.scalacheck"             %% "scalacheck"           % "1.14.3"
   val scalaTestPlus     = "org.scalatestplus"          %% "scalacheck-1-14"      % "3.1.2.0"
-  val akkaHttp          = "com.typesafe.akka"          %% "akka-http"            % akkaHttpVersion withJavadoc()
-  val akkaHttpTestkit   = "com.typesafe.akka"          %% "akka-http-testkit"    % akkaHttpVersion withJavadoc()
-  val akkaHttpCirce     = "de.heikoseeberger"          %% "akka-http-circe"      % "1.21.0"
+  val pekkoHttp         = "org.apache.pekko"           %% "pekko-http"           % pekkoHttpVersion withJavadoc()
+  val pekkoHttpTestkit  = "org.apache.pekko"           %% "pekko-http-testkit"   % pekkoHttpVersion withJavadoc()
+  val pekkoHttpCirce    = "de.heikoseeberger"          %% "akka-http-circe"     % "1.21.0"
   val circeGeneric      = "io.circe"                   %% "circe-generic"        % "0.9.3"
   val circeParser       = "io.circe"                   %% "circe-parser"         % "0.9.3"
 
@@ -100,7 +100,7 @@ object Dependencies {
   )
 
   lazy val queryDeps = commonDeps ++ Seq(
-    "com.typesafe.akka"       %% "akka-actor"                           % akkaVersion,
+    "org.apache.pekko"         %% "pekko-actor"                          % pekkoVersion,
     "com.tdunning"            % "t-digest"                              % "3.1",
     "com.softwaremill.sttp"   %% "circe"                                % sttpVersion ,
     "com.softwaremill.sttp"   %% "async-http-client-backend-future"     % sttpVersion,
@@ -110,17 +110,19 @@ object Dependencies {
   )
 
   lazy val coordDeps = commonDeps ++ Seq(
-    "com.typesafe.akka"      %% "akka-slf4j"                  % akkaVersion,
-    "com.typesafe.akka"      %% "akka-cluster"                % akkaVersion withJavadoc(),
-    "io.altoo"               %% "akka-kryo-serialization"     % "1.0.0" excludeAll(excludeMinlog, excludeOldLz4,excludeAkka),
-    "de.javakaffee"          % "kryo-serializers"             % "0.42" excludeAll(excludeMinlog,excludeAkka),
+    "org.apache.pekko"       %% "pekko-cluster-tools"         % pekkoVersion,
+    "org.apache.pekko"       %% "pekko-slf4j"                 % pekkoVersion,
+    "org.apache.pekko"       %% "pekko-cluster"               % pekkoVersion withJavadoc(),
+    "org.apache.pekko"       %% "pekko-management-cluster-bootstrap" % "1.0.0",
+    "org.apache.pekko"       %% "pekko-discovery"             % pekkoVersion,
+    "io.altoo"               %% "akka-kryo-serialization"     % "1.0.0" excludeAll(excludeMinlog, excludeOldLz4, excludePekko),
+    "de.javakaffee"          % "kryo-serializers"             % "0.42" excludeAll(excludeMinlog),
     "io.kamon"               %% "kamon-prometheus"            % kamonBundleVersion,
     // Redirect minlog logs to SLF4J
     "com.dorkbox"            % "MinLog-SLF4J"                 % "1.12",
     "com.opencsv"            % "opencsv"                      % "3.3",
-    "org.sisioh"             %% "akka-cluster-custom-downing" % "0.0.21" excludeAll(excludeAkka),
-    "com.typesafe.akka"      %% "akka-testkit"                % akkaVersion % Test,
-    "com.typesafe.akka"      %% "akka-multi-node-testkit"     % akkaVersion % Test,
+    "org.apache.pekko"       %% "pekko-testkit"               % pekkoVersion % Test,
+    "org.apache.pekko"       %% "pekko-multi-node-testkit"    % pekkoVersion % Test,
     "org.apache.commons" % "commons-text" % "1.9"
   )
 
@@ -133,7 +135,7 @@ object Dependencies {
   lazy val kafkaDeps = Seq(
     "io.monix"          %% "monix-kafka-1x" % monixKafkaVersion,
     "org.apache.kafka"  % "kafka-clients"   % "1.0.0"     % "compile,test" exclude("org.slf4j", "slf4j-log4j12"),
-    "com.typesafe.akka" %% "akka-testkit"   % akkaVersion % "test,it",
+    "org.apache.pekko"  %% "pekko-testkit"  % pekkoVersion % "test,it",
     scalaTest  % "test,it",
     logbackDep % "test,it")
 
@@ -152,11 +154,11 @@ object Dependencies {
 
   lazy val httpDeps = Seq(
     logbackDep,
-    akkaHttp,
-    akkaHttpCirce,
+    pekkoHttp,
+    pekkoHttpCirce,
     circeGeneric,
     circeParser,
-    akkaHttpTestkit % Test,
+    pekkoHttpTestkit % Test,
     "org.xerial.snappy" % "snappy-java" % "1.1.8.4"
   )
 
@@ -164,29 +166,14 @@ object Dependencies {
     logbackDep,
     "io.kamon"              %% "kamon-zipkin"            % kamonBundleVersion,
     "com.iheart"            %% "ficus"                   % ficusVersion      % Test,
-    "com.typesafe.akka"     %% "akka-multi-node-testkit" % akkaVersion       % Test,
+    "org.apache.pekko"      %% "pekko-multi-node-testkit" % pekkoVersion     % Test,
     "com.softwaremill.sttp" %% "circe"                   % sttpVersion       % Test,
     "com.softwaremill.sttp" %% "akka-http-backend"       % sttpVersion       % Test,
     "com.softwaremill.sttp" %% "core"                    % sttpVersion       % Test,
-    "com.typesafe.akka"     %% "akka-stream"             % "2.5.11"          % Test
+    "org.apache.pekko"      %% "pekko-stream"            % pekkoVersion      % Test
   )
 
-  lazy val bootstrapperDeps = Seq(
-    logbackDep,
-    scalaLoggingDep,
-    "com.typesafe.akka"            %% "akka-cluster"            % akkaVersion,
-    // akka http should be a compile time dependency only. Users of this library may want to use a different http server
-    akkaHttp          % "test; provided",
-    akkaHttpCirce     % "test; provided",
-    circeGeneric      % "test; provided",
-    circeParser       % "test; provided",
-    "com.typesafe.akka"            %% "akka-slf4j"              % akkaVersion,
-    "dnsjava"                      %  "dnsjava"                 % "2.1.8",
-    "org.scalaj"                   %% "scalaj-http"             % "2.3.0",
-    "com.typesafe.akka"            %% "akka-testkit"            % akkaVersion   % Test,
-    "com.typesafe.akka"            %% "akka-multi-node-testkit" % akkaVersion   % Test,
-    scalaTest   % Test
-  )
+  // Removed bootstrapperDeps - no longer needed with Pekko built-in cluster bootstrap
 
   //  lazy val sparkDeps = Seq(
   //    // We don't want LOG4J.  We want Logback!  The excludeZK is to help with a conflict re Coursier plugin.
@@ -198,12 +185,23 @@ object Dependencies {
 
   lazy val jmhDeps = Seq(
     "org.apache.spark" %% "spark-sql" % sparkVersion excludeAll(excludeSlf4jLog4j, excludeZK, excludeJersey),
-    "com.typesafe.akka"      %% "akka-testkit"                % akkaVersion
+    "org.apache.pekko"       %% "pekko-testkit"               % pekkoVersion
   )
 
   lazy val gatlingDeps = Seq(
       "io.gatling.highcharts" % "gatling-charts-highcharts" % "3.2.0" % "test,it",
       "io.gatling"            % "gatling-test-framework"    % "3.2.0" % "test,it"
+  )
+
+  lazy val pekkoBootstrapDeps = Seq(
+    "org.apache.pekko"       %% "pekko-actor"             % pekkoVersion,
+    "org.apache.pekko"       %% "pekko-cluster"           % pekkoVersion,
+    "org.apache.pekko"       %% "pekko-http"              % pekkoHttpVersion,
+    "de.heikoseeberger"      %% "akka-http-circe"         % "1.21.0",
+    "io.circe"               %% "circe-generic"           % "0.9.3",
+    "io.circe"               %% "circe-parser"            % "0.9.3",
+    scalaLoggingDep,
+    scalaTest % Test
   )
 
   //  lazy val stressDeps = Seq(

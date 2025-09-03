@@ -5,11 +5,11 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 
-import akka.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
 import kamon.tag.TagSet
 import monix.execution.Scheduler.Implicits.{global => scheduler}
+import org.apache.pekko.actor.ActorRef
 
 import filodb.coordinator.client.Client
 import filodb.coordinator.client.QueryCommands.LogicalPlan2Query

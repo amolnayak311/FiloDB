@@ -2,8 +2,8 @@ package filodb.stress
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import akka.pattern.ask
-import akka.util.Timeout
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 import monix.eval.Task
 import monix.reactive.Observable
 import org.apache.spark.sql.{SaveMode, SparkSession}

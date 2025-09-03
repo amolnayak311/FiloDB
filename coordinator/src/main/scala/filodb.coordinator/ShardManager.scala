@@ -3,8 +3,8 @@ package filodb.coordinator
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
-import akka.actor.{ActorRef, Address, AddressFromURIString}
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.{ActorRef, Address, AddressFromURIString}
 import org.scalactic._
 
 import filodb.coordinator.NodeClusterActor._

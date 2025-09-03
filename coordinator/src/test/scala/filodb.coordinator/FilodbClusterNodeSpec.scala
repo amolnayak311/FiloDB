@@ -2,7 +2,7 @@ package filodb.coordinator
 
 import java.net.Socket
 
-import akka.testkit.TestProbe
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -145,8 +145,8 @@ class ClusterNodeRecoverySpec extends FilodbClusterNodeSpec {
   import scala.collection.immutable
   import scala.concurrent.duration._
 
-  import akka.actor.{ActorRef, Address}
-  import akka.testkit.{TestKit, TestProbe}
+  import org.apache.pekko.actor.{ActorRef, Address}
+  import org.apache.pekko.testkit.{TestKit, TestProbe}
 
   import filodb.coordinator.client.LocalClient
   import filodb.core.NamesTestData._

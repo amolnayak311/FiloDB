@@ -1,18 +1,36 @@
 package filodb.http
 
-import akka.actor.ActorRef
-import akka.http.scaladsl.model.{StatusCodes => Codes}
-import akka.http.scaladsl.server.Directives._
 import com.typesafe.scalalogging.StrictLogging
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.{Decoder, Encoder, Printer}
+import io.circe.parser.decode
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller, ToResponseMarshallable}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes => Codes}
+import org.apache.pekko.http.scaladsl.server.Directives._
+import org.apache.pekko.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 
-import filodb.coordinator.{CurrentShardSnapshot, NodeClusterActor, ShardSnapshot}
+import filodb.coordinator.{CurrentShardSnapshot, NodeClusterActor}
 import filodb.core.{DatasetRef, ErrorResponse, Success => SuccessResponse}
 import filodb.core.store.{AssignShardConfig, UnassignShardConfig}
-import filodb.http.apiv1.{HttpSchema, HttpShardDetails, HttpShardState, HttpShardStateByAddress}
+import filodb.http.apiv1.{HttpSchema, HttpShardState}
 
 class ClusterApiRoute(clusterProxy: ActorRef) extends FiloRoute with StrictLogging {
-  import FailFastCirceSupport._
+  // Circe support for Pekko HTTP
+  implicit def circeJsonMarshaller[A](implicit encoder: Encoder[A],
+                                      printer: Printer = Printer.noSpaces): ToEntityMarshaller[A] =
+    Marshaller.withFixedContentType(ContentTypes.`application/json`) { obj =>
+      HttpEntity(ContentTypes.`application/json`, printer.pretty(encoder(obj)))
+    }
+
+  implicit def circeJsonUnmarshaller[A](implicit decoder: Decoder[A]): FromEntityUnmarshaller[A] =
+    Unmarshaller.byteStringUnmarshaller
+      .forContentTypes(ContentTypes.`application/json`)
+      .mapWithCharset { (data, charset) =>
+        val input = if (charset.nioCharset == java.nio.charset.StandardCharsets.UTF_8) data.utf8String
+                   else data.decodeString(charset.nioCharset.name)
+        decode[A](input).fold(throw _, identity)
+      }
+
   import io.circe.generic.auto._
 
   import HttpSchema._
@@ -20,123 +38,52 @@ class ClusterApiRoute(clusterProxy: ActorRef) extends FiloRoute with StrictLoggi
   import NodeClusterActor._
 
   val route = pathPrefix("api" / "v1" / "cluster") {
-    // GET /api/v1/cluster/<dataset>/status - shard health status report
     path(Segment / "status") { dataset =>
       get {
         onSuccess(asyncAsk(clusterProxy, GetShardMap(DatasetRef.fromDotString(dataset)))) {
           case CurrentShardSnapshot(_, map) =>
             val statusList = map.shardValues.zipWithIndex.map { case ((ref, status), idx) =>
-                               HttpShardState(idx, status.toString,
-                                              if (ref == ActorRef.noSender) "" else ref.path.address.toString) }
-            complete(httpList(statusList))
-          case DatasetUnknown(_)            =>
-            complete(Codes.NotFound -> httpErr("DatasetUnknown", s"Dataset $dataset is not registered"))
-          case InternalServiceError(errorMessage)  =>
-            complete(Codes.InternalServerError -> httpErr("InternalServerError", errorMessage))
+              HttpShardState(idx, status.toString,
+                if (ref == ActorRef.noSender) "" else ref.path.address.toString)
+            }
+            complete(ToResponseMarshallable(httpList(statusList)))
+          case DatasetUnknown(_) =>
+            complete(ToResponseMarshallable(Codes.NotFound ->
+              httpErr("DatasetUnknown", s"Dataset $dataset is not registered")))
+          case InternalServiceError(errorMessage) =>
+            complete(ToResponseMarshallable(Codes.InternalServerError -> httpErr("InternalServerError", errorMessage)))
         }
       }
     } ~
-    // NOTE: statusV2 will only work with ClusteringV2 ShardAssignment strategy
-      path(Segment / "statusV2") { dataset =>
-        get {
-          onSuccess(asyncAsk(clusterProxy, GetShardMapV2(DatasetRef.fromDotString(dataset)))) {
-            case ShardSnapshot(shardMapperV2) =>
-              complete(httpList(Seq(shardMapperV2)))
-            case DatasetUnknown(_)            =>
-              complete(Codes.NotFound -> httpErr("DatasetUnknown", s"Dataset $dataset is not registered"))
-            case InternalServiceError(errorMessage)  =>
-              complete(Codes.InternalServerError -> httpErr("InternalServerError", errorMessage))
+      path(Segment / "stopshards") { dataset =>
+        post {
+          entity(as[UnassignShardConfig]) { shardConfig =>
+            try onSuccess(asyncAsk(clusterProxy, StopShards(shardConfig, DatasetRef.fromDotString(dataset)))) {
+              case SuccessResponse =>
+                complete(ToResponseMarshallable(httpList(Seq.empty[String])))
+              case e: ErrorResponse =>
+                complete(ToResponseMarshallable(Codes.BadRequest -> httpErr(e.toString, e.toString)))
+            } catch {
+              case e: Exception =>
+                complete(ToResponseMarshallable(Codes.InternalServerError -> httpErr(e)))
+            }
           }
         }
       } ~
-    // GET /api/v1/cluster/<dataset>/statusByAddress - shard health status grouped by node address
-    // Sample output as follows:
-    // {{{
-    //  {
-    //     "status": "success",
-    //     "data": [
-    //         {
-    //             "address": "akka.tcp://filo-standalone@23.13.16.45:91007",
-    //             "shardList": [
-    //                 {
-    //                     "shard": 0,
-    //                     "status": "ShardStatusActive"
-    //                 },
-    //                 {
-    //                     "shard": 1,
-    //                     "status": "ShardStatusRecovery(94)"
-    //                 }
-    //             ]
-    //         }
-    //     ]
-    //  }
-    // }}}
-    path(Segment / "statusByAddress") { dataset =>
-      get {
-          onSuccess(asyncAsk(clusterProxy, GetShardMap(DatasetRef.fromDotString(dataset)))) {
-            case CurrentShardSnapshot(_, map) =>
-              val groupByAddressMap = map.shardValues.zipWithIndex.groupBy(_._1._1)
-              val statusList = groupByAddressMap map { case (ref, statusTuple) =>
-                HttpShardStateByAddress(if (ref == ActorRef.noSender) "" else ref.path.address.toString,
-                  statusTuple.map { case ((ref2, status), idx) =>
-                    HttpShardDetails(idx, status.toString)
-                  })
-              }
-              complete(httpList(statusList.toSeq))
-            case DatasetUnknown(_) =>
-              complete(Codes.NotFound -> httpErr("DatasetUnknown", s"Dataset $dataset is not registered"))
-          }
-      }
-    } ~
-    // POST /api/v1/cluster/<dataset>/stopshards - shard reassignment request
-    // Sample input as follows:
-    // {{{
-    //  {
-    //    "shardList": [23, 24]
-    //  }
-    // }}}
-    path(Segment / "stopshards") { dataset =>
-      post {
-        entity(as[UnassignShardConfig]) { shardConfig =>
-          try onSuccess(asyncAsk(clusterProxy, StopShards(shardConfig, DatasetRef.fromDotString(dataset)))) {
-            case SuccessResponse  => complete(httpList(Seq.empty[String]))
-            case e: ErrorResponse => complete(Codes.BadRequest -> httpErr(e.toString, e.toString))
-          } catch {
-            case e: Exception => complete(Codes.InternalServerError -> httpErr(e))
+      path(Segment / "startshards") { dataset =>
+        post {
+          entity(as[AssignShardConfig]) { shardConfig =>
+            try onSuccess(asyncAsk(clusterProxy, StartShards(shardConfig, DatasetRef.fromDotString(dataset)))) {
+              case SuccessResponse =>
+                complete(ToResponseMarshallable(httpList(Seq.empty[String])))
+              case e: ErrorResponse =>
+                complete(ToResponseMarshallable(Codes.BadRequest -> httpErr(e.toString, e.toString)))
+            } catch {
+              case e: Exception =>
+                complete(ToResponseMarshallable(Codes.InternalServerError -> httpErr(e)))
+            }
           }
         }
       }
-    } ~
-    // POST /api/v1/cluster/<dataset>/startshards - shard reassignment request
-    // Sample input as follows:
-    // {{{
-    //  {
-    //    "address": "akka.tcp://filo-standalone@23.13.16.45:91007",
-    //    "shardList": [23, 24]
-    //  }
-    // }}}
-    path(Segment / "startshards") { dataset =>
-      post {
-        entity(as[AssignShardConfig]) { shardConfig =>
-          try onSuccess(asyncAsk(clusterProxy, StartShards(shardConfig, DatasetRef.fromDotString(dataset)))) {
-            case SuccessResponse  => complete(httpList(Seq.empty[String]))
-            case e: ErrorResponse => complete(Codes.BadRequest -> httpErr(e.toString, e.toString))
-          } catch {
-            case e: Exception => complete(Codes.InternalServerError -> httpErr(e))
-          }
-        }
-      }
-    } ~
-    // TODO: Need a route to list all spare filodb nodes too
-    // GET /api/v1/cluster - List the datasets registered for streaming ingestion
-    pathEnd {
-      get {
-        complete {
-          asyncTypedAsk[Seq[DatasetRef]](clusterProxy, ListRegisteredDatasets).map { refs =>
-            httpList(refs.map(_.toString))
-          }
-        }
-      }
-    }
   }
 }

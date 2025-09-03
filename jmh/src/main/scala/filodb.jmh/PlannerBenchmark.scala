@@ -2,8 +2,8 @@
 package filodb.jmh
 
 import java.util.concurrent.TimeUnit
-import akka.actor.ActorSystem
-import akka.testkit.TestProbe
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import org.openjdk.jmh.annotations._

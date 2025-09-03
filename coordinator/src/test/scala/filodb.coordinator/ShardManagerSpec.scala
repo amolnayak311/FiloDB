@@ -2,8 +2,8 @@ package filodb.coordinator
 
 import scala.concurrent.duration._
 
-import akka.actor.{ActorRef, Address}
-import akka.testkit.TestProbe
+import org.apache.pekko.actor.{ActorRef, Address}
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 
 import filodb.core.{DatasetRef, TestData}

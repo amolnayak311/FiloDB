@@ -1,8 +1,8 @@
 package filodb.coordinator
 
-import akka.actor.Props
 import monix.reactive.MulticastStrategy
 import monix.reactive.subjects.ConcurrentSubject
+import org.apache.pekko.actor.Props
 
 import filodb.coordinator.ActorSystemHolder.system
 import filodb.query.Query.qLogger

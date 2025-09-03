@@ -3,10 +3,10 @@ package filodb.coordinator.queryplanner
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
-import akka.actor.ActorRef
 import com.github.benmanes.caffeine.cache.{Cache, Caffeine}
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
+import org.apache.pekko.actor.ActorRef
 
 import filodb.coordinator.{ActorPlanDispatcher, GrpcPlanDispatcher, RemoteActorPlanDispatcher, ShardMapper}
 import filodb.coordinator.client.QueryCommands.StaticSpreadProvider

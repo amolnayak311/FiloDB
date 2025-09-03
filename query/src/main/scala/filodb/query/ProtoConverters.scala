@@ -6,9 +6,9 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.JavaConverters._
 
-import akka.pattern.AskTimeoutException
 import com.google.protobuf.ByteString
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.pattern.AskTimeoutException
 
 import filodb.core.binaryrecord2.{RecordContainer, RecordSchema}
 import filodb.core.memstore.SchemaMismatch

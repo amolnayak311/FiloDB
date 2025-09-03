@@ -3,8 +3,8 @@ package filodb.coordinator
 import scala.collection.mutable.{HashMap, HashSet, Map => MMap}
 import scala.concurrent.duration._
 
-import akka.actor.{ActorRef, Cancellable, Props}
-import akka.event.LoggingReceive
+import org.apache.pekko.actor.{ActorRef, Cancellable, Props}
+import org.apache.pekko.event.LoggingReceive
 
 import filodb.core.DatasetRef
 

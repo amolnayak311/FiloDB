@@ -3,10 +3,10 @@ package filodb.coordinator
 import scala.collection.immutable
 import scala.concurrent.duration.FiniteDuration
 
-import akka.actor.{ActorPath, Address, RootActorPath}
 import com.typesafe.config.{Config, ConfigFactory}
 import monix.execution.atomic.AtomicAny
 import net.ceedubs.ficus.Ficus._
+import org.apache.pekko.actor.{ActorPath, Address, RootActorPath}
 import org.scalactic._
 
 import filodb.core.GlobalConfig

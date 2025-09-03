@@ -3,16 +3,16 @@ package filodb.cli
 import java.io.OutputStream
 import java.math.BigInteger
 import java.sql.Timestamp
+import java.util
 
 import scala.concurrent.duration._
 import scala.util.Try
 
-import akka.actor.ActorSystem
 import com.opencsv.CSVWriter
 import com.typesafe.scalalogging.StrictLogging
-import java.util
 import monix.execution.{Scheduler, UncaughtExceptionReporter}
 import monix.reactive.Observable
+import org.apache.pekko.actor.ActorSystem
 import org.rogach.scallop.ScallopConf
 import org.rogach.scallop.exceptions.ScallopException
 import org.scalactic._
@@ -129,7 +129,7 @@ object CliMain extends StrictLogging {
     println("\nTo change config: pass -Dconfig.file=/path/to/config as first arg or set $FILO_CONFIG_FILE")
     println("  or override any config by passing -Dconfig.path=newvalue as first args")
     println("\nFor detailed debugging, uncomment the TRACE/DEBUG loggers in logback.xml and add these ")
-    println("  options:  ./filo-cli -Dakka.loglevel=DEBUG -Dakka.actor.debug.receive=on -Dakka.actor.debug.autoreceive=on --command importcsv ...")
+    println("  options:  ./filo-cli -Dpekko.loglevel=DEBUG -Dpekko.actor.debug.receive=on -Dpekko.actor.debug.autoreceive=on --command importcsv ...")
   }
 
   def getRef(args: Arguments): DatasetRef = DatasetRef(args.dataset(), args.database.toOption)

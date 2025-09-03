@@ -3,16 +3,17 @@ package filodb.coordinator.v2
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
-import akka.util.Timeout
+import scala.collection.mutable
+import scala.concurrent.Future
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
 import monix.execution.{CancelableFuture, Scheduler}
 import monix.reactive.Observable
-import scala.collection.mutable
-import scala.concurrent.Future
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import org.apache.pekko.actor.{ActorRef, ActorSystem}
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 
 import filodb.coordinator.{ActorName, CurrentShardSnapshot, FilodbSettings, ShardMapper}
 import filodb.core.DatasetRef

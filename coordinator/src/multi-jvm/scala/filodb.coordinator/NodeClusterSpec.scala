@@ -2,10 +2,10 @@ package filodb.coordinator
 
 import scala.concurrent.duration._
 
-import akka.actor.ActorRef
-import akka.remote.testkit.MultiNodeConfig
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.remote.testkit.MultiNodeConfig
 import org.scalatest.Ignore
-// import akka.remote.transport.ThrottlerTransportAdapter.Direction.Both
+// import org.apache.pekko.remote.transport.ThrottlerTransportAdapter.Direction.Both
 import com.typesafe.config.ConfigFactory
 
 import filodb.core._
@@ -38,7 +38,7 @@ object NodeClusterSpecConfig extends MultiNodeConfig {
  */
 abstract class NodeClusterSpec extends ClusterSpec(NodeClusterSpecConfig) {
 
-  import akka.testkit._
+  import org.apache.pekko.testkit._
 
   import NodeClusterActor._
   import NodeClusterSpecConfig._

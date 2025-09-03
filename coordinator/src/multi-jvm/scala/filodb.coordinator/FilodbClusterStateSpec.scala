@@ -1,8 +1,9 @@
 package filodb.coordinator
 
 import java.util.UUID
+import scala.concurrent.duration._
 
-import akka.remote.testkit._
+import org.apache.pekko.remote.testkit.MultiNodeConfig
 import com.typesafe.config.{Config, ConfigFactory}
 
 class FilodbClusterStateSpecMultiJvmNode1 extends FilodbClusterStateSpec
@@ -10,56 +11,78 @@ class FilodbClusterStateSpecMultiJvmNode2 extends FilodbClusterStateSpec
 class FilodbClusterStateSpecMultiJvmNode3 extends FilodbClusterStateSpec
 class FilodbClusterStateSpecMultiJvmNode4 extends FilodbClusterStateSpec
 
-abstract class FilodbClusterStateSpec
-  extends MultiNodeSpec(FilodbClusterStateSpecMultiNodeConfig)
-    with MultiNodeClusterBehavior {
+abstract class FilodbClusterStateSpec extends ClusterSpec(FilodbClusterStateSpecMultiNodeConfig) {
 
   import FilodbClusterStateSpecMultiNodeConfig._
 
-  "FilodbCluster" must {
-    "initialize and join the cluster" in {
-      awaitClusterUp(roles: _*)
+  override def initialParticipants = roles.size
+
+  override def beforeAll(): Unit = {
+    multiNodeSpecBeforeAll()
+  }
+
+  override def afterAll(): Unit = multiNodeSpecAfterAll()
+
+  describe("FilodbCluster") {
+    it("should initialize and join the cluster") {
+      // Join cluster
+      runOn(first) {
+        cluster join node(first).address
+        awaitCond(cluster.isJoined)
+      }
+      
+      runOn(second, third, fourth) {
+        cluster join node(first).address
+        awaitCond(cluster.isJoined)
+      }
 
       runOn(roles: _*) {
-        within(defaultTimeout) {
-          filodbCluster.isInitialized
-          filodbCluster.isJoined
+        within(30.seconds) {
+          cluster.isInitialized should be(true)
+          cluster.isJoined should be(true)
         }
       }
       enterBarrier("roles-up")
     }
-    "have expected state to one node leaving" in {
+    
+    it("should have expected state when one node leaves") {
       runOn(second) {
-        within(defaultTimeout) {
+        within(30.seconds) {
           info(s"leaving on $myself")
-          cluster leave myAddress
-          awaitCond(!filodbCluster.isJoined, defaultTimeout)
+          cluster.cluster.leave(node(myself).address)
+          awaitCond(!cluster.isJoined, 30.seconds)
           info(s"removed on $myself")
-          awaitCond(cluster.isTerminated, defaultTimeout)
+          awaitCond(cluster.cluster.isTerminated, 30.seconds)
           info(s"cluster terminated on $myself")
         }
       }
 
       runOn(roles.filterNot(_ == second): _*) {
-        awaitCond(!filodbCluster.state.members.exists(_.address == address(second)), defaultTimeout)
-        awaitCond(filodbCluster.state.members.size == 3, defaultTimeout)
+        within(30.seconds) {
+          awaitCond(cluster.cluster.state.members.size == 3, 30.seconds)
+        }
       }
+      enterBarrier("node-left")
     }
-    "have expected state on one node downing" in {
+    
+    it("should have expected state when one node is downed") {
       val victim = fourth
-      val downing = address(victim)
-
+      
       runOn(victim) {
-        info(s"downing $myself")
-        cluster down downing
-        awaitCond(!filodbCluster.isJoined, defaultTimeout)
-        info(s"removed on $myself")
-        awaitCond(cluster.isTerminated, defaultTimeout)
-        info(s"cluster terminated on $myself")
+        within(30.seconds) {
+          info(s"downing $myself")
+          cluster.cluster.down(node(myself).address)
+          awaitCond(!cluster.isJoined, 30.seconds)
+          info(s"removed on $myself")
+          awaitCond(cluster.cluster.isTerminated, 30.seconds)
+          info(s"cluster terminated on $myself")
+        }
       }
 
       runOn(first, third) {
-        awaitCond(filodbCluster.state.members.size == 2, defaultTimeout)
+        within(30.seconds) {
+          awaitCond(cluster.cluster.state.members.size == 2, 30.seconds)
+        }
       }
       enterBarrier("finished")
     }
@@ -78,9 +101,9 @@ object FilodbClusterStateSpecMultiNodeConfig extends MultiNodeConfig {
 
   def clusterConfig: Config = ConfigFactory.parseString(
     s"""
-       |akka.actor.provider = cluster
-       |akka.actor.warn-about-java-serializer-usage = off
-       |akka.cluster {
+       |pekko.actor.provider = cluster
+       |pekko.actor.warn-about-java-serializer-usage = off
+       |pekko.cluster {
        |      jmx.enabled                         = off
        |      gossip-interval                     = 200 ms
        |      leader-actions-interval             = 200 ms
@@ -91,22 +114,21 @@ object FilodbClusterStateSpecMultiNodeConfig extends MultiNodeConfig {
        |}
        |
        |# Don't terminate ActorSystem via CoordinatedShutdown in tests
-       |# TODO: Remove during 2.4 cleanup
-       |akka.coordinated-shutdown.terminate-actor-system = off
-       |akka.coordinated-shutdown.run-by-jvm-shutdown-hook = off
-       |akka.cluster.run-coordinated-shutdown-when-down = off
+       |pekko.coordinated-shutdown.terminate-actor-system = off
+       |pekko.coordinated-shutdown.run-by-jvm-shutdown-hook = off
+       |pekko.cluster.run-coordinated-shutdown-when-down = off
        |
-       |akka.loglevel = INFO
-       |akka.log-dead-letters = off
-       |akka.log-dead-letters-during-shutdown = off
-       |akka.remote {
+       |pekko.loglevel = INFO
+       |pekko.log-dead-letters = off
+       |pekko.log-dead-letters-during-shutdown = off
+       |pekko.remote {
        |  log-remote-lifecycle-events = off
        |  artery.advanced.flight-recorder {
        |    enabled=on
        |    destination=target/flight-recorder-${UUID.randomUUID().toString}.afr
        |  }
        |}
-       |akka.test {
+       |pekko.test {
        |  single-expect-default = 5 s
        |}
     """.stripMargin)

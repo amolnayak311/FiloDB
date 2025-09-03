@@ -5,7 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import filodb.core.query._
 import ProtoConverters._
 import QueryResponseConverter._
-import akka.pattern.AskTimeoutException
+import org.apache.pekko.pattern.AskTimeoutException
 import filodb.core.QueryTimeoutException
 import filodb.core.binaryrecord2.RecordSchema
 import filodb.core.memstore.SchemaMismatch

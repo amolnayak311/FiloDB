@@ -2,13 +2,16 @@ package filodb.http
 
 import scala.concurrent.Future
 
-import akka.actor.ActorRef
-import akka.http.scaladsl.model.{HttpEntity, HttpResponse, MediaTypes, StatusCodes => Codes}
-import akka.http.scaladsl.server.Directives._
-import akka.stream.ActorMaterializer
-import akka.util.ByteString
 import com.typesafe.scalalogging.StrictLogging
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.{Decoder, Encoder, Printer}
+import io.circe.parser.decode
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, HttpResponse, MediaTypes, StatusCodes => Codes}
+import org.apache.pekko.http.scaladsl.server.Directives._
+import org.apache.pekko.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.util.ByteString
 import org.xerial.snappy.Snappy
 import remote.RemoteStorage.ReadRequest
 
@@ -23,10 +26,25 @@ import filodb.prometheus.parse.Parser
 import filodb.query._
 import filodb.query.exec.ExecPlan
 
-class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit am: ActorMaterializer)
+class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit am: Materializer)
            extends FiloRoute with StrictLogging {
 
-  import FailFastCirceSupport._
+  // Circe support for Pekko HTTP
+  implicit def circeJsonMarshaller[A](implicit encoder: Encoder[A],
+                                      printer: Printer = Printer.noSpaces): ToEntityMarshaller[A] =
+    Marshaller.withFixedContentType(ContentTypes.`application/json`) { obj =>
+      HttpEntity(ContentTypes.`application/json`, printer.pretty(encoder(obj)))
+    }
+
+  implicit def circeJsonUnmarshaller[A](implicit decoder: Decoder[A]): FromEntityUnmarshaller[A] =
+    Unmarshaller.byteStringUnmarshaller
+      .forContentTypes(ContentTypes.`application/json`)
+      .mapWithCharset { (data, charset) =>
+        val input = if (charset.nioCharset == java.nio.charset.StandardCharsets.UTF_8) data.utf8String
+                   else data.decodeString(charset.nioCharset.name)
+        decode[A](input).fold(throw _, identity)
+      }
+
   import io.circe.generic.auto._
   // DO NOT REMOVE PromCirceSupport import below assuming it is unused - Intellij removes it in auto-imports :( .
   // Needed to override DataSampl case class Encoder/Decoders.
@@ -47,9 +65,9 @@ class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit a
     // If partialResults query parameter value is not specified, value from config is used
     path( "api" / "v1" / "query_range") {
       get {
-        parameter(('query.as[String], 'start.as[Double], 'end.as[Double], 'histogramMap.as[Boolean].?,
-          'step.as[Int], 'explainOnly.as[Boolean].?, 'verbose.as[Boolean].?, 'spread.as[Int].?,
-          'allowPartialResults.as[Boolean].?))
+        parameters("query".as[String], "start".as[Double], "end".as[Double], "histogramMap".as[Boolean].?,
+          "step".as[Int], "explainOnly".as[Boolean].?, "verbose".as[Boolean].?, "spread".as[Int].?,
+          "allowPartialResults".as[Boolean].?)
         { (query, start, end, histMap, step, explainOnly, verbose, spread, partialResults) =>
           val logicalPlan = Parser.queryRangeToLogicalPlan(query, TimeStepParams(start.toLong, step, end.toLong))
 
@@ -66,8 +84,8 @@ class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit a
     // [Instant Queries](https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries)
     path( "api" / "v1" / "query") {
       get {
-        parameter(('query.as[String], 'time.as[Double], 'explainOnly.as[Boolean].?, 'verbose.as[Boolean].?,
-          'spread.as[Int].?, 'histogramMap.as[Boolean].?, 'step.as[Double].?, 'allowPartialResults.as[Boolean].?))
+        parameters("query".as[String], "time".as[Double], "explainOnly".as[Boolean].?, "verbose".as[Boolean].?,
+          "spread".as[Int].?, "histogramMap".as[Boolean].?, "step".as[Double].?, "allowPartialResults".as[Boolean].?)
         { (query, time, explainOnly, verbose, spread, histMap, step, partialResults) =>
           val stepLong = step.map(_.toLong).getOrElse(0L)
           val logicalPlan = Parser.queryToLogicalPlan(query, time.toLong, stepLong)
@@ -83,8 +101,8 @@ class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit a
     // [Label names](https://prometheus.io/docs/prometheus/latest/querying/api/#getting-label-names)
     path( "api" / "v1" / "labels") {
       get {
-        parameter(("match[]".as[String], 'start.as[Double].?, 'end.as[Double].?,
-          'explainOnly.as[Boolean].?, 'verbose.as[Boolean].?, 'spread.as[Int].?, 'allowPartialResults.as[Boolean].?))
+        parameters("match[]".as[String], "start".as[Double].?, "end".as[Double].?,
+          "explainOnly".as[Boolean].?, "verbose".as[Boolean].?, "spread".as[Int].?, "allowPartialResults".as[Boolean].?)
         { (query, start, end, explainOnly, verbose, spread, partialResults) =>
           val currentTimeInSecs = System.currentTimeMillis()/1000
           val startLong = start.map(_.toLong).getOrElse(currentTimeInSecs - ONE_DAY_IN_SECS)
@@ -103,8 +121,8 @@ class PrometheusApiRoute(nodeCoord: ActorRef, settings: HttpSettings)(implicit a
     // TODO Why did we deviate from Prom by taking match param as comma separated key-values instead of PromQL selector?
     path ("api" / "v1" / "label" / Segment / "values") { label: String =>
       get {
-        parameter(("match[]".as[String].?, 'start.as[Double].?, 'end.as[Double].?, 'explainOnly.as[Boolean].?,
-          'allowPartialResults.as[Boolean].?))
+        parameters("match[]".as[String].?, "start".as[Double].?, "end".as[Double].?, "explainOnly".as[Boolean].?,
+          "allowPartialResults".as[Boolean].?)
         { (query, start, end, explainOnly, partialResults) =>
           val currentTimeInSecs = System.currentTimeMillis()/1000
           val startLong = start.map(_.toLong).getOrElse(currentTimeInSecs - ONE_DAY_IN_SECS)

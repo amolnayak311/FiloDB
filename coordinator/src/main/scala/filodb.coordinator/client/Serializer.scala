@@ -17,7 +17,7 @@ import filodb.memory.format.ZeroCopyUTF8String
 /**
  * Register commonly used classes for efficient Kryo serialization.  If this is not done then Kryo might have to
  * send over the FQCN, which wastes tons of space like Java serialization
- * NOTE: top-level classes still need to be configured in Typesafe config in akka.actor.serialization-bindings
+ * NOTE: top-level classes still need to be configured in Typesafe config in pekko.actor.serialization-bindings
  * These are just for the enclosing classes
  *
  * NOTE: for now, we need to explicitly register every BinaryVector class.  This is tedious  :(

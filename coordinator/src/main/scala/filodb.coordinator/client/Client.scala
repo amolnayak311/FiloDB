@@ -5,9 +5,9 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import akka.actor.{ActorRef, ActorSystem, Address}
-import akka.pattern.ask
-import akka.util.Timeout
+import org.apache.pekko.actor.{ActorRef, ActorSystem, Address}
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 
 import filodb.coordinator.ActorName
 import filodb.core._

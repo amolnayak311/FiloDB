@@ -2,8 +2,8 @@ package filodb.coordinator.queryplanner
 
 import scala.concurrent.duration._
 import scala.math.min
-import akka.actor.ActorSystem
-import akka.testkit.TestProbe
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funspec.AnyFunSpec
@@ -88,43 +88,43 @@ class SingleClusterPlannerSplitSpec extends AnyFunSpec with Matchers with ScalaF
     Following ExecPlan should be generated:
 
     T~StitchRvsMapper()
-    -E~LocalPartitionDistConcatExec() on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -E~LocalPartitionDistConcatExec() on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     1#
-    --E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    --E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     ---T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
-    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173425483, step=1000, end=1597173435483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173425483, step=1000, end=1597173435483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     ---T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
-    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173425483, step=1000, end=1597173435483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173425483, step=1000, end=1597173435483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173125483,1597173435483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     2#
-    --E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    --E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     ---T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
-    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173436483, step=1000, end=1597173446483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173436483, step=1000, end=1597173446483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     ---T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
-    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    ----E~LocalPartitionReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173436483, step=1000, end=1597173446483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec(dataset=timeseries, shard=15, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     -----T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
     ------T~PeriodicSamplesMapper(start=1597173436483, step=1000, end=1597173446483, window=Some(5000), functionId=Some(Rate), rawSource=true, offsetMs=None)
-    -------E~MultiSchemaPartitionsExec.(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#-111191042])
+    -------E~MultiSchemaPartitionsExec.(dataset=timeseries, shard=31, chunkMethod=TimeRangeChunkScan(1597173136483,1597173446483), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService))), colName=Some(value), schema=None) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#-111191042])
     3#...
     4#...
     5#...

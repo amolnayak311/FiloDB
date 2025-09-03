@@ -2,8 +2,8 @@ package filodb.coordinator
 
 import scala.util.{Failure, Success, Try}
 
-import akka.actor.{ActorRef, Address}
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.{ActorRef, Address}
 
 import filodb.core.DatasetRef
 

@@ -1,33 +1,32 @@
+
 package filodb.standalone
 
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import akka.actor.ActorRef
-import akka.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
-import akka.testkit.ImplicitSender
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.akkahttp.AkkaHttpBackend
 import com.softwaremill.sttp.circe._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.StrictLogging
-import net.ceedubs.ficus.Ficus._
-import org.scalatest._
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Millis, Seconds, Span}
-import org.xerial.snappy.Snappy
-import remote.RemoteStorage.{LabelMatcher, Query, ReadRequest, ReadResponse}
-import filodb.coordinator._
 import filodb.coordinator.NodeClusterActor.{DatasetResourceSpec, IngestionSource}
+import filodb.coordinator._
 import filodb.coordinator.client.LocalClient
 import filodb.core.DatasetRef
 import filodb.core.store.StoreConfig
 import filodb.prometheus.ast.TimeStepParams
 import filodb.prometheus.parse.Parser
-import filodb.query.{QueryError, Sampl, QueryResult => QueryResult2}
-import filodb.query.PromCirceSupport
-import filodb.query.Sampl
-import filodb.query.SuccessResponse
+import filodb.query.{QueryError, Sampl, SuccessResponse, QueryResult => QueryResult2}
+import net.ceedubs.ficus.Ficus._
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.remote.testkit.{MultiNodeConfig, MultiNodeSpec}
+import org.apache.pekko.testkit.ImplicitSender
+import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.time.{Millis, Seconds, Span}
+import org.xerial.snappy.Snappy
+import remote.RemoteStorage.{LabelMatcher, Query, ReadRequest, ReadResponse}
+
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 /**
  * A trait used for MultiJVM tests based on starting the standalone FiloServer using timeseries-dev config
@@ -39,7 +38,7 @@ abstract class StandaloneMultiJvmSpec(config: MultiNodeConfig) extends MultiNode
   with matchers.should.Matchers with BeforeAndAfterAll {
   override def initialParticipants: Int = roles.size
 
-  import akka.testkit._
+  import org.apache.pekko.testkit._
 
   override implicit val patienceConfig = PatienceConfig(timeout = Span(30, Seconds), interval = Span(250, Millis))
 
@@ -117,7 +116,7 @@ abstract class StandaloneMultiJvmSpec(config: MultiNodeConfig) extends MultiNode
   def validateShardAssignments(client: LocalClient,
                                nodeCount: Int,
                                assignments: Seq[Int],
-                               coordinator: akka.actor.ActorRef): Unit =
+                               coordinator: org.apache.pekko.actor.ActorRef): Unit =
     client.getShardMapper(dataset, false) match {
       case Some(mapper) =>
         mapper.allNodes.size shouldEqual nodeCount
@@ -198,8 +197,8 @@ abstract class StandaloneMultiJvmSpec(config: MultiNodeConfig) extends MultiNode
 
   def runHttpQuery(queryTimestamp: Long): Double = {
 
+    import filodb.query.PromCirceSupport._
     import io.circe.generic.auto._
-    import PromCirceSupport._
 
     implicit val sttpBackend = AkkaHttpBackend()
     val url = uri"http://localhost:8080/promql/prometheus/api/v1/query?query=$query&time=${queryTimestamp/1000}"

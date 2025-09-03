@@ -1,7 +1,7 @@
 package filodb.coordinator.queryplanner
 
-import akka.actor.ActorSystem
-import akka.testkit.TestProbe
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.StrictLogging
 

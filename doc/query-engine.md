@@ -174,23 +174,23 @@ The `LogicalPlan` tree for the above PromQL would be
 A candidate `ExecPlan` tree materialized for the above `LogicalPlan` would be
 
 ```
-E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-2#-1307032783])
+E~BinaryJoinExec(binaryOp=DIV, on=List(), ignoring=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-2#-1307032783])
 -T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
---E~ReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-3#-1420498912])
+--E~ReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-3#-1420498912])
 ---T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
 ----T~PeriodicSamplesMapper(start=1526094229444, step=1000, end=1526094279444, window=Some(5000), functionId=Some(Rate), funcParams=List())
------E~SelectRawPartitionsExec(shard=2, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3)))) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-3#-1420498912])
+-----E~SelectRawPartitionsExec(shard=2, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3)))) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-3#-1420498912])
 ---T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
 ----T~PeriodicSamplesMapper(start=1526094229444, step=1000, end=1526094279444, window=Some(5000), functionId=Some(Rate), funcParams=List())
------E~SelectRawPartitionsExec(shard=3, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3)))) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-4#372411693])
+-----E~SelectRawPartitionsExec(shard=3, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_bucket)), ColumnFilter(job,Equals(myService)), ColumnFilter(le,Equals(0.3)))) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-4#372411693])
 -T~AggregatePresenter(aggrOp=Sum, aggrParams=List())
---E~ReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-2#-1307032783])
+--E~ReduceAggregateExec(aggrOp=Sum, aggrParams=List()) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-2#-1307032783])
 ---T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
 ----T~PeriodicSamplesMapper(start=1526094229444, step=1000, end=1526094279444, window=Some(5000), functionId=Some(Rate), funcParams=List())
------E~SelectRawPartitionsExec(shard=0, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService)))) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-1#2034238507])
+-----E~SelectRawPartitionsExec(shard=0, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService)))) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-1#2034238507])
 ---T~AggregateMapReduce(aggrOp=Sum, aggrParams=List(), without=List(), by=List(job))
 ----T~PeriodicSamplesMapper(start=1526094229444, step=1000, end=1526094279444, window=Some(5000), functionId=Some(Rate), funcParams=List())
------E~SelectRawPartitionsExec(shard=1, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService)))) on ActorPlanDispatcher(Actor[akka://default/system/testProbe-2#-1307032783])
+-----E~SelectRawPartitionsExec(shard=1, rowKeyRange=RowKeyInterval(b[1526094229444],b[1526094279444]), filters=List(ColumnFilter(__name__,Equals(http_request_duration_seconds_count)), ColumnFilter(job,Equals(myService)))) on ActorPlanDispatcher(Actor[pekko://default/system/testProbe-2#-1307032783])
 ```
 
 **Notation:**

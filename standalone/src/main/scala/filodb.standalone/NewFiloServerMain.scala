@@ -2,11 +2,11 @@ package filodb.standalone
 
 import scala.concurrent.duration.FiniteDuration
 
-import akka.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import kamon.Kamon
 import monix.execution.{Scheduler, UncaughtExceptionReporter}
 import net.ceedubs.ficus.Ficus._
+import org.apache.pekko.actor.ActorRef
 
 import filodb.coordinator._
 import filodb.coordinator.client.LocalClient

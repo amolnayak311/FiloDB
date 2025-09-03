@@ -1,12 +1,16 @@
 package filodb.http
 
-import akka.actor.ActorRef
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives._
 import com.typesafe.scalalogging.StrictLogging
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.{Decoder, Encoder, Printer}
+import io.circe.parser.decode
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import org.apache.pekko.http.scaladsl.server.Directives._
+import org.apache.pekko.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 
 import filodb.coordinator._
+import filodb.coordinator.client.Client._
 import filodb.coordinator.v2.{DatasetShardHealth, LocalShardsHealthRequest}
 import filodb.core.DatasetRef
 import filodb.http.apiv1.HttpSchema
@@ -15,10 +19,25 @@ final case class DatasetEvents(dataset: String, shardEvents: Seq[String])
 
 class HealthRoute(coordinatorActor: ActorRef, v2ClusterEnabled: Boolean, settings: HttpSettings)
   extends FiloRoute with StrictLogging {
-  import FailFastCirceSupport._
+
+  // Circe support for Pekko HTTP
+  implicit def circeJsonMarshaller[A](implicit encoder: Encoder[A],
+                                      printer: Printer = Printer.noSpaces): ToEntityMarshaller[A] =
+    Marshaller.withFixedContentType(ContentTypes.`application/json`) { obj =>
+      HttpEntity(ContentTypes.`application/json`, printer.pretty(encoder(obj)))
+    }
+
+  implicit def circeJsonUnmarshaller[A](implicit decoder: Decoder[A]): FromEntityUnmarshaller[A] =
+    Unmarshaller.byteStringUnmarshaller
+      .forContentTypes(ContentTypes.`application/json`)
+      .mapWithCharset { (data, charset) =>
+        val input = if (charset.nioCharset == java.nio.charset.StandardCharsets.UTF_8) data.utf8String
+                   else data.decodeString(charset.nioCharset.name)
+        decode[A](input).fold(throw _, identity)
+      }
+
   import io.circe.generic.auto._
 
-  import filodb.coordinator.client.Client._
   import HttpSchema._
 
   private val healthyShardStatuses = Seq(ShardStatusActive.getClass,

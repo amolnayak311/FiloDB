@@ -6,10 +6,10 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-import akka.actor.ActorRef
-import akka.pattern.ask
-import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 
 import filodb.coordinator.NodeClusterActor.DatasetResourceSpec
 import filodb.coordinator.client.MiscCommands

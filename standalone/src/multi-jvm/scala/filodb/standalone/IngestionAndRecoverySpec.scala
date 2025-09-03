@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.{FiniteDuration, _}
 
-import akka.remote.testkit.MultiNodeConfig
+import org.apache.pekko.remote.testkit.MultiNodeConfig
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.time.{Millis, Seconds, Span}
 

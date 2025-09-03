@@ -4,12 +4,12 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import akka.actor.ActorRef
-import akka.pattern.{ask, AskTimeoutException}
-import akka.util.Timeout
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.reactive.Observable
+import org.apache.pekko.actor.ActorRef
+import org.apache.pekko.pattern.{ask, AskTimeoutException}
+import org.apache.pekko.util.Timeout
 
 import filodb.coordinator.client.QueryCommands.ProtoExecPlan
 import filodb.core.QueryTimeoutException

@@ -3,9 +3,9 @@ package filodb.spark
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-import akka.actor.AddressFromURIString
-import akka.pattern.ask
-import akka.util.Timeout
+import org.apache.pekko.actor.AddressFromURIString
+import org.apache.pekko.pattern.ask
+import org.apache.pekko.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import org.apache.spark.SparkContext

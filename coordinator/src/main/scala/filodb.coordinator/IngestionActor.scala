@@ -8,8 +8,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import akka.actor.{ActorRef, Props}
-import akka.event.LoggingReceive
 import kamon.Kamon
 import kamon.metric.MeasurementUnit
 import monix.eval.Task
@@ -17,6 +15,8 @@ import monix.execution.{CancelableFuture, Scheduler, UncaughtExceptionReporter}
 import monix.execution.schedulers.SchedulerService
 import monix.reactive.Observable
 import net.ceedubs.ficus.Ficus._
+import org.apache.pekko.actor.{ActorRef, Props}
+import org.apache.pekko.event.LoggingReceive
 
 import filodb.core.{DatasetRef, GlobalConfig, Iterators}
 import filodb.core.downsample.{DownsampleConfig, DownsampledTimeSeriesStore}

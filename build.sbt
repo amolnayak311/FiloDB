@@ -27,7 +27,8 @@ lazy val cli = Submodules.cli
 lazy val http = Submodules.http
 lazy val gateway = Submodules.gateway
 lazy val standalone = Submodules.standalone
-lazy val bootstrapper = Submodules.bootstrapper
+lazy val pekkoBootstrap = Submodules.pekkoBootstrap
+// Removed bootstrapper comment - now using custom pekko-bootstrap module
 lazy val sparkJobs = Submodules.sparkJobs
 lazy val jmh = Submodules.jmh
 lazy val gatling = Submodules.gatling

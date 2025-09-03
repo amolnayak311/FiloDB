@@ -1,6 +1,6 @@
 package filodb.coordinator
 
-import akka.actor._
+import org.apache.pekko.actor._
 
 import filodb.core.DatasetRef
 
