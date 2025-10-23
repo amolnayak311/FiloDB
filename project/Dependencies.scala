@@ -13,7 +13,6 @@ object Dependencies {
   val excludeNetty  = ExclusionRule(organization = "io.netty", name = "netty-handler")
   val excludeXBean = ExclusionRule(organization = "org.apache.xbean", name = "xbean-asm6-shaded")
   val excludegrpc = ExclusionRule(organization = "io.grpc")
-  val excludePekko = ExclusionRule(organization = "org.apache.pekko")
 
 
   /* Versions in various modules versus one area of build */
@@ -115,7 +114,7 @@ object Dependencies {
     "org.apache.pekko"       %% "pekko-cluster"               % pekkoVersion withJavadoc(),
     "org.apache.pekko"       %% "pekko-management-cluster-bootstrap" % "1.0.0",
     "org.apache.pekko"       %% "pekko-discovery"             % pekkoVersion,
-    "io.altoo"               %% "akka-kryo-serialization"     % "1.0.0" excludeAll(excludeMinlog, excludeOldLz4, excludePekko),
+    "io.altoo"               %% "pekko-kryo-serialization"    % "1.0.1" excludeAll(excludeMinlog, excludeOldLz4),
     "de.javakaffee"          % "kryo-serializers"             % "0.42" excludeAll(excludeMinlog),
     "io.kamon"               %% "kamon-prometheus"            % kamonBundleVersion,
     // Redirect minlog logs to SLF4J
@@ -149,7 +148,8 @@ object Dependencies {
   lazy val gatewayDeps = commonDeps ++ Seq(
     logbackDep,
     "io.monix"   %% "monix-kafka-1x" % monixKafkaVersion,
-    "org.rogach" %% "scallop"        % "3.1.1"
+    "org.rogach" %% "scallop"        % "3.1.1",
+    "io.netty" % "netty" % "3.10.6.Final"
   )
 
   lazy val httpDeps = Seq(

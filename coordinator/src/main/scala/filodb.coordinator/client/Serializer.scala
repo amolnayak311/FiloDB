@@ -4,8 +4,8 @@ import com.esotericsoftware.kryo.{Kryo, Serializer => KryoSerializer}
 import com.esotericsoftware.kryo.io._
 import com.esotericsoftware.minlog.Log
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer
-import io.altoo.akka.serialization.kryo.DefaultKryoInitializer
-import io.altoo.akka.serialization.kryo.serializer.scala.ScalaKryo
+import io.altoo.serialization.kryo.pekko.DefaultKryoInitializer
+import io.altoo.serialization.kryo.scala.serializer.ScalaKryo
 
 import filodb.coordinator.FilodbSettings
 import filodb.core._
