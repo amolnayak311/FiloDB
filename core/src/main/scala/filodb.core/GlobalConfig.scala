@@ -38,9 +38,9 @@ object GlobalConfig extends StrictLogging {
 
   val configToDisableAkkaCluster = ConfigFactory.parseString(
     """
-      |akka {
+      |pekko {
       |  extensions = []
-      |  actor.provider = "remote"
+      |  actor.provider = "org.apache.pekko.remote.RemoteActorRefProvider"
       |}
       |""".stripMargin)
 

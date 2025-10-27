@@ -13,6 +13,7 @@ object Dependencies {
   val excludeNetty  = ExclusionRule(organization = "io.netty", name = "netty-handler")
   val excludeXBean = ExclusionRule(organization = "org.apache.xbean", name = "xbean-asm6-shaded")
   val excludegrpc = ExclusionRule(organization = "io.grpc")
+  val excludeKryoShaded = ExclusionRule(organization = "com.esotericsoftware", name = "kryo-shaded")
 
 
   /* Versions in various modules versus one area of build */
@@ -77,10 +78,10 @@ object Dependencies {
     "org.apache.lucene"            % "lucene-facet"       % "9.7.0" withJavadoc(),
     "com.github.alexandrnikitin"   %% "bloom-filter"      % "0.11.0",
     "org.rocksdb"                  % "rocksdbjni"         % "6.29.5",
-    "com.esotericsoftware"         % "kryo"               % "4.0.0" excludeAll(excludeMinlog),
+    "com.esotericsoftware"         % "kryo"               % "5.5.0" excludeAll(excludeMinlog),
     "com.dorkbox"                  % "MinLog-SLF4J"       % "1.12",
     "com.github.ben-manes.caffeine" % "caffeine"          % "3.0.5",
-    "com.twitter"                  %% "chill"             % "0.9.3",
+    "com.twitter"                  %% "chill"             % "0.9.3" excludeAll(excludeKryoShaded),
     "org.apache.commons"           % "commons-lang3"      % "3.14.0"
   )
 
@@ -114,8 +115,8 @@ object Dependencies {
     "org.apache.pekko"       %% "pekko-cluster"               % pekkoVersion withJavadoc(),
     "org.apache.pekko"       %% "pekko-management-cluster-bootstrap" % "1.0.0",
     "org.apache.pekko"       %% "pekko-discovery"             % pekkoVersion,
-    "io.altoo"               %% "pekko-kryo-serialization"    % "1.0.1" excludeAll(excludeMinlog, excludeOldLz4),
-    "de.javakaffee"          % "kryo-serializers"             % "0.42" excludeAll(excludeMinlog),
+    "io.altoo"               %% "pekko-kryo-serialization"    % "1.1.0" excludeAll(excludeMinlog, excludeOldLz4),
+    "de.javakaffee"          % "kryo-serializers"             % "0.42" excludeAll(excludeMinlog, excludeKryoShaded),
     "io.kamon"               %% "kamon-prometheus"            % kamonBundleVersion,
     // Redirect minlog logs to SLF4J
     "com.dorkbox"            % "MinLog-SLF4J"                 % "1.12",
